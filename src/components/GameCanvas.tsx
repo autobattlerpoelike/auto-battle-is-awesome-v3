@@ -144,63 +144,152 @@ export default function GameCanvas() {
     }
 
     function draw() {
-      const canvas = canvasRef.current; if (!canvas) return
-      const ctx = canvas.getContext('2d')
-      ctx.clearRect(0,0,canvas.width,canvas.height)
-      ctx.fillStyle = '#071024'; ctx.fillRect(0,0,canvas.width,canvas.height)
-      ctx.strokeStyle = '#334155'; ctx.lineWidth = 2; ctx.strokeRect(10,10,canvas.width-20, canvas.height-20)
+  const canvas = canvasRef.current;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#071024';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
 
-      // draw enemies
-      state.enemies.forEach((e,i) => {
-        const pos = enemyPositions[e.id] || { x: CANVAS_W - 120 - i*28, y: CANVAS_H/2 + i*36 }
-        const alpha = e.hp <= 0 ? Math.max(0, 1 - ((Date.now() - (e.alphaStart||Date.now()))/1500)) : 1
-        ctx.save(); ctx.globalAlpha = alpha
-        if (e.type === 'melee') ctx.fillStyle = '#dc2626'
-        else if (e.type === 'ranged') ctx.fillStyle = '#f97316'
-        else ctx.fillStyle = '#a78bfa'
-        ctx.beginPath(); ctx.arc(pos.x, pos.y, 20, 0, Math.PI*2); ctx.fill()
+  // draw enemies
+  state.enemies.forEach((e, i) => {
+    const pos = enemyPositions[e.id] || { x: CANVAS_W - 120 - i * 28, y: CANVAS_H / 2 + i * 36 };
+    const alpha = e.hp <= 0 ? Math.max(0, 1 - ((Date.now() - (e.alphaStart || Date.now())) / 1500)) : 1;
+    ctx.save();
+    ctx.globalAlpha = alpha;
 
-        ctx.fillStyle = '#000'; ctx.globalAlpha = 0.95 * alpha
-        if (e.type === 'melee') { ctx.beginPath(); ctx.moveTo(pos.x-8, pos.y-18); ctx.lineTo(pos.x-2, pos.y-26); ctx.lineTo(pos.x+4, pos.y-18); ctx.fill() }
-        else if (e.type === 'ranged') { ctx.beginPath(); ctx.arc(pos.x, pos.y-6, 6, Math.PI*0.2, Math.PI*0.8); ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.stroke() }
-        else { ctx.beginPath(); ctx.arc(pos.x, pos.y, 26, 0, Math.PI*2); ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=2; ctx.stroke() }
+    if (e.type === 'melee') ctx.fillStyle = '#dc2626';
+    else if (e.type === 'ranged') ctx.fillStyle = '#f97316';
+    else ctx.fillStyle = '#a78bfa';
 
-        drawHpBar(ctx, pos.x, pos.y - 34, 56, 8, e.hp, e.maxHp, alpha)
-        drawLabel(ctx, e.name, pos.x, pos.y - 46, alpha)
-        ctx.restore()
-      })
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 20, 0, Math.PI * 2);
+    ctx.fill();
 
-      // player
-      ctx.fillStyle = '#000'; ctx.fillRect(playerPos.x - 18, playerPos.y - 18, 36, 36)
-      drawHpBar(ctx, playerPos.x, playerPos.y - 34, 90, 8, state.player.hp, state.player.maxHp, 1)
-      drawLabel(ctx, `Lv ${state.player.level} • ${state.player.equipped ? state.player.equipped.name+' ('+state.player.equipped.rarity+')' : 'Unarmed'}`, playerPos.x, playerPos.y - 46, 1)
-
-      // projectiles
-      projectiles.forEach(p => {
-        ctx.beginPath(); ctx.lineWidth = p.size || 3; ctx.strokeStyle = p.color || '#fff'; ctx.moveTo(p.px || p.x, p.py || p.y); ctx.lineTo(p.x, p.y); ctx.stroke()
-        ctx.beginPath(); ctx.fillStyle = p.color || '#fff'; ctx.arc(p.x, p.y, p.radius || 3, 0, Math.PI*2); ctx.fill()
-        if (p.glow) { ctx.beginPath(); ctx.fillStyle = p.color || '#fff'; ctx.globalAlpha = 0.12; ctx.arc(p.x, p.y, (p.radius||3)*3, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1 }
-      })
-
-      // effects (damage numbers, impacts, slashes)
-      effects.forEach(e => {
-        const age = Date.now() - e.t; const alpha = Math.max(0, 1 - age/(e.ttl||1600))
-        ctx.save(); ctx.globalAlpha = alpha
-        if (e.kind === 'damage') {
-          ctx.font = (e.size||14) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = e.color || '#fff'; ctx.fillText(e.text, e.x, e.y - (age/180))
-        } else if (e.kind === 'impact') {
-          ctx.beginPath(); ctx.fillStyle = e.color || '#fff'; ctx.arc(e.x, e.y, 6 * (1 - age/(e.ttl||300)), 0, Math.PI*2); ctx.fill()
-        } else if (e.kind === 'slash') {
-          ctx.translate(e.x, e.y); ctx.rotate(e.angle || 0); ctx.strokeStyle = e.color || '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-8, -18); ctx.quadraticCurveTo(0, -10, 18, -6); ctx.stroke()
-        } else if (e.kind === 'pickup') {
-          ctx.font = '14px sans-serif'; ctx.fillStyle = e.color || '#fff'; ctx.fillText(e.text, e.x, e.y - age/120)
-        }
-        ctx.restore()
-      })
-
-      // UI
-      ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.fillText('Enemies: ' + state.enemies.length, 12, canvas.height - 36); ctx.fillText('Auto: ON', 12, canvas.height - 18)
+    ctx.fillStyle = '#000';
+    ctx.globalAlpha = 0.95 * alpha;
+    if (e.type === 'melee') {
+      ctx.beginPath();
+      ctx.moveTo(pos.x - 8, pos.y - 18);
+      ctx.lineTo(pos.x - 2, pos.y - 26);
+      ctx.lineTo(pos.x + 4, pos.y - 18);
+      ctx.fill();
+    } else if (e.type === 'ranged') {
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y - 6, 6, Math.PI * 0.2, Math.PI * 0.8);
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 26, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
     }
+
+    drawHpBar(ctx, pos.x, pos.y - 34, 56, 8, e.hp, e.maxHp, alpha);
+    drawLabel(ctx, e.name, pos.x, pos.y - 46, alpha);
+    ctx.restore();
+  });
+
+  // player
+  ctx.fillStyle = '#000';
+  ctx.fillRect(playerPos.x - 18, playerPos.y - 18, 36, 36);
+  drawHpBar(ctx, playerPos.x, playerPos.y - 34, 90, 8, state.player.hp, state.player.maxHp, 1);
+  drawLabel(
+    ctx,
+    `Lv ${state.player.level} • ${
+      state.player.equipped
+        ? state.player.equipped.name + ' (' + state.player.equipped.rarity + ')'
+        : 'Unarmed'
+    }`,
+    playerPos.x,
+    playerPos.y - 46,
+    1
+  );
+
+  // projectiles
+  projectiles.forEach((p) => {
+    // trail line
+    ctx.beginPath();
+    ctx.lineWidth = p.size || 3;
+    ctx.strokeStyle = p.color || '#fff';
+    ctx.moveTo(p.px || p.x, p.py || p.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+
+    // main projectile
+    const radius = Math.max(0.5, Math.abs(p.radius ?? 3));
+    if (Number.isFinite(radius)) {
+      ctx.beginPath();
+      ctx.fillStyle = p.color || '#fff';
+      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // glow effect
+    if (p.glow) {
+      const glowRadius = Math.max(0.5, Math.abs(p.radius ?? 3) * 3);
+      if (Number.isFinite(glowRadius)) {
+        ctx.beginPath();
+        ctx.fillStyle = p.color || '#fff';
+        ctx.globalAlpha = 0.12;
+        ctx.arc(p.x, p.y, glowRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+  });
+
+  // effects (damage numbers, impacts, slashes)
+  effects.forEach((e) => {
+    const age = Date.now() - e.t;
+    const alpha = Math.max(0, 1 - age / (e.ttl || 1600));
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    if (e.kind === 'damage') {
+      ctx.font = (e.size || 14) + 'px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = e.color || '#fff';
+      ctx.fillText(e.text, e.x, e.y - age / 180);
+    } else if (e.kind === 'impact') {
+      const impactRadius = Math.max(0.5, Math.abs(6 * (1 - age / (e.ttl || 300))));
+      if (Number.isFinite(impactRadius)) {
+        ctx.beginPath();
+        ctx.fillStyle = e.color || '#fff';
+        ctx.arc(e.x, e.y, impactRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (e.kind === 'slash') {
+      ctx.translate(e.x, e.y);
+      ctx.rotate(e.angle || 0);
+      ctx.strokeStyle = e.color || '#fff';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-8, -18);
+      ctx.quadraticCurveTo(0, -10, 18, -6);
+      ctx.stroke();
+    } else if (e.kind === 'pickup') {
+      ctx.font = '14px sans-serif';
+      ctx.fillStyle = e.color || '#fff';
+      ctx.fillText(e.text, e.x, e.y - age / 120);
+    }
+
+    ctx.restore();
+  });
+
+  // UI
+  ctx.fillStyle = '#fff';
+  ctx.font = '12px sans-serif';
+  ctx.fillText('Enemies: ' + state.enemies.length, 12, canvas.height - 36);
+  ctx.fillText('Auto: ON', 12, canvas.height - 18);
+}
+
 
     function drawHpBar(ctx,x,y,w,h,hp,max,alpha){ const pct = Math.max(0, Math.min(1, hp/max)); ctx.fillStyle = 'rgba(31,41,55,'+alpha+')'; ctx.fillRect(x-w/2,y-h/2,w,h); const grad = ctx.createLinearGradient(x-w/2,y,x+w/2,y); grad.addColorStop(0,'#16a34a'); grad.addColorStop(1,'#dc2626'); ctx.fillStyle = grad; ctx.globalAlpha = alpha; ctx.fillRect(x-w/2,y-h/2,w*pct,h); ctx.globalAlpha = 1; ctx.strokeStyle = 'rgba(0,0,0,'+(0.6*alpha)+')'; ctx.lineWidth = 1; ctx.strokeRect(x-w/2,y-h/2,w,h) }
     function drawLabel(ctx,t,x,y,a){ ctx.fillStyle = 'rgba(255,255,255,'+a+')'; ctx.font = '12px sans-serif'; ctx.textAlign='center'; ctx.fillText(t,x,y) }
