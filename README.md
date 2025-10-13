@@ -1,4 +1,4 @@
-# Auto Battle Is Awesome (Phase 2)
+# Auto Battle Is Awesome (Phase 2) -- This is an AI coded game 
 
 This build implements Phase 2 features:
 - Auto-spawn enemies every 2.2s up to 25 max
