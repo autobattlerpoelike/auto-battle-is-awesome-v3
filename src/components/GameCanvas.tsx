@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react'
 import { useGame } from '../systems/gameContext'
 
-const CANVAS_W = 900, CANVAS_H = 500
+const CANVAS_W = 1400, CANVAS_H = 700
 
 function rarityColor(r) {
   if (!r) return '#ffffff'
@@ -299,10 +299,13 @@ export default function GameCanvas() {
   }, [enemyPositions, playerPos, projectiles, effects, state.enemies, state.log, state.skills])
 
   return (
-    <div className="card">
-      <h2 className="text-xl font-semibold">Arena</h2>
-      <canvas ref={canvasRef} width={CANVAS_W} height={CANVAS_H} style={{ width: '100%', maxWidth: CANVAS_W }} />
-      <div className="mt-3 small">Auto-spawn active — enemies spawn every ~2.2s (max 25)</div>
+    <div className="game-canvas-container">
+      <canvas 
+        ref={canvasRef} 
+        width={CANVAS_W} 
+        height={CANVAS_H} 
+        className="game-canvas" 
+      />
     </div>
   )
 }

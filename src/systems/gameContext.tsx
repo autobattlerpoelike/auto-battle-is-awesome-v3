@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useReducer } from 'react'
-import { defaultPlayer } from './player'
+import { Player, defaultPlayer, calculatePlayerStats } from './player'
 import { spawnEnemyForLevel } from './enemy'
 import { simulateCombatTick } from './combat'
 import { generateLoot } from './loot'
@@ -49,12 +49,28 @@ function reducer(state, action) {
       }
 
       if (res.enemyDefeated) {
-        const loot = generateLoot(target.level)
+        const loot = generateLoot(target.level, target.isBoss)
         newEnemies = newEnemies.filter(e => e.id !== enemyId)
-        newLog.unshift(`Enemy defeated! Loot: ${loot.name}`)
+        const lootMessage = target.isBoss ? `🎉 BOSS DEFEATED! Epic Loot: ${loot.name}` : `Enemy defeated! Loot: ${loot.name}`
+        newLog.unshift(lootMessage)
         newPlayer.gold += loot.value
-        newPlayer.xp += Math.max(1, Math.floor(target.level * 4))
-        const newInventory = [...state.inventory, loot]
+        // Bosses give more XP
+        const xpGain = target.isBoss ? Math.floor(target.level * 12) : Math.max(1, Math.floor(target.level * 4))
+        newPlayer.xp += xpGain
+        
+        // Implement inventory limit with automatic gold conversion
+        const maxInventoryItems = 10 * 4 // 10 pages * 4 items per page (list view)
+        let newInventory = [...state.inventory]
+        
+        if (newInventory.length >= maxInventoryItems) {
+          // Convert excess items to gold automatically
+          const excessGold = loot.value
+          newPlayer.gold += excessGold
+          newLog.unshift(`💰 Inventory full! ${loot.name} converted to ${excessGold} gold`)
+        } else {
+          // Add item to inventory normally
+          newInventory = [...newInventory, loot]
+        }
 
         // level up loop
         while (newPlayer.xp >= newPlayer.nextLevelXp) {
@@ -85,18 +101,9 @@ function reducer(state, action) {
       const item = state.inventory.find(i => i.id === itemId)
       if (!item) return state
       const player = { ...state.player, equipped: item }
-      // recompute dps applying item power and extras
-      player.baseDps = Math.max(1, player.baseDps)
-      player.dps = player.baseDps + (item.power ?? 0)
-      if (item.extras) {
-        for (const ex of item.extras) {
-          if (ex.key === 'hp') { player.maxHp += ex.val; player.hp += ex.val }
-          if (ex.key === 'dps') { player.dps += ex.val }
-          if (ex.key === 'projectileSpeed') { player.projectileSpeed = (player.projectileSpeed || 1) + ex.val }
-        }
-      }
-      saveState({ player, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
-      return { ...state, player }
+      const calculatedPlayer = calculatePlayerStats(player)
+      saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
+      return { ...state, player: calculatedPlayer }
     }
     case 'DISCARD': {
       const id = action.payload
@@ -113,13 +120,18 @@ function reducer(state, action) {
       const newSkills = { ...state.skills, [key]: rank }
       const player = { ...state.player }
       player.skillPoints -= cost
+      player.skills = newSkills
       // immediate simple application: adjust base fields
       if (key === 'endurance') {
         player.maxHp += 10
         player.hp += 10
       }
-      saveState({ player, inventory: state.inventory, enemies: state.enemies, skills: newSkills })
-      return { ...state, player, skills: newSkills, log: [`Upgraded ${key} to ${rank}`, ...state.log].slice(0,200) }
+      const calculatedPlayer = calculatePlayerStats(player)
+      saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: newSkills })
+      return { ...state, player: calculatedPlayer, skills: newSkills, log: [`Upgraded ${key} to ${rank}`, ...state.log].slice(0,200) }
+    }
+    case 'TOGGLE_AUTO': {
+      return { ...state, autoCombat: !state.autoCombat }
     }
     case 'RESET': {
       saveState({ player: defaultPlayer(), inventory: [], enemies: [spawnEnemyForLevel(1)], skills: {} })
@@ -133,7 +145,11 @@ function reducer(state, action) {
   }
 }
 
-const GameContext = createContext(null)
+const GameContext = createContext({
+  state: initialState,
+  actions: {},
+  dispatch: () => {}
+})
 
 export function GameProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState)
@@ -177,7 +193,13 @@ export function GameProvider({ children }) {
     log: (m) => dispatch({ type: 'LOG', payload: m })
   }
 
-  return <GameContext.Provider value={{ state, actions }}>{children}</GameContext.Provider>
+  return <GameContext.Provider value={{ state, actions, dispatch }}>{children}</GameContext.Provider>
 }
 
-export function useGame() { return useContext(GameContext) }
+export function useGame() { 
+  const context = useContext(GameContext)
+  if (!context) {
+    throw new Error('useGame must be used within a GameProvider')
+  }
+  return context
+}
