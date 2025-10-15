@@ -119,7 +119,7 @@ export default function CharacterStatusPanel() {
             </div>
             <div className="flex justify-between">
               <span>Mana:</span>
-              <span className="text-blue-400">{p.mana}/{p.maxMana}</span>
+              <span className="text-blue-400">{Math.floor(p.mana || 0)}/{Math.floor(p.maxMana || 50)}</span>
             </div>
           </div>
         </div>
@@ -196,7 +196,7 @@ export default function CharacterStatusPanel() {
           <div className="grid grid-cols-2 gap-1 text-xs">
             <div className="flex justify-between">
               <span>Armor:</span>
-              <span className="text-gray-300">{armor}</span>
+              <span className="text-gray-300">{armor.toFixed(1)}</span>
             </div>
             <div className="flex justify-between">
               <span>Dodge:</span>
