@@ -35,6 +35,12 @@ export default function Header({ onOpenModal }: HeaderProps) {
               🎯 Skills
             </button>
             <button 
+              onClick={() => onOpenModal('skillgems')}
+              className="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-800/60 border border-purple-600/50 text-purple-300 rounded-md transition-all duration-200 text-sm font-medium hover:shadow-lg hover:shadow-purple-500/20"
+            >
+              💎 Skill Gems
+            </button>
+            <button 
               onClick={() => onOpenModal('inventory')}
               className="px-3 py-1.5 bg-green-900/50 hover:bg-green-800/60 border border-green-600/50 text-green-300 rounded-md transition-all duration-200 text-sm font-medium hover:shadow-lg hover:shadow-green-500/20"
             >

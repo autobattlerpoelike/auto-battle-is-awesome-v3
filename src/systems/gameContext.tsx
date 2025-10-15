@@ -5,6 +5,23 @@ import { simulateCombatTick } from './combat'
 import { generateLoot } from './loot'
 import { loadSave, saveState } from './save'
 import { Equipment, EquipmentSlot } from './equipment'
+import { 
+  unlockSkillGem, 
+  unlockSupportGem, 
+  levelUpSkillGem, 
+  levelUpSupportGem, 
+  equipSkillToBar, 
+  unequipSkillFromBar, 
+  attachSupportGem, 
+  detachSupportGem 
+} from './skillManager'
+import { 
+  createDefaultSkillBar, 
+  createDefaultSkillGem, 
+  createDefaultSupportGem, 
+  MAIN_SKILL_GEMS, 
+  SUPPORT_GEMS 
+} from './skillGems'
 
 // Type definitions
 interface GameState {
@@ -31,6 +48,16 @@ interface GameActions {
   upgradeSkill: (key: string) => void
   resetAll: () => void
   log: (message: string) => void
+  
+  // Skill Gem Management
+  unlockSkillGem: (skillId: string) => void
+  unlockSupportGem: (supportId: string) => void
+  levelUpSkillGem: (skillId: string) => void
+  levelUpSupportGem: (supportId: string) => void
+  equipSkillToBar: (skillId: string, slotIndex: number) => void
+  unequipSkillFromBar: (slotIndex: number) => void
+  attachSupportGem: (skillId: string, supportId: string) => void
+  detachSupportGem: (skillId: string, supportId: string) => void
 }
 
 interface GameContextType {
@@ -63,6 +90,17 @@ function reducer(state: GameState, action: GameAction): GameState {
         }
         if (!payload.player.equipment || typeof payload.player.equipment !== 'object') {
           payload.player.equipment = {}
+        }
+        // Migrate skillBar if missing (for old saves)
+        if (!payload.player.skillBar) {
+          payload.player.skillBar = createDefaultSkillBar()
+        }
+        // Ensure skillGems and supportGems exist
+        if (!Array.isArray(payload.player.skillGems)) {
+          payload.player.skillGems = MAIN_SKILL_GEMS.map(template => createDefaultSkillGem(template))
+        }
+        if (!Array.isArray(payload.player.supportGems)) {
+          payload.player.supportGems = SUPPORT_GEMS.map(template => createDefaultSupportGem(template))
         }
         // Recalculate player stats to ensure consistency
         payload.player = calculatePlayerStats(payload.player)
@@ -257,6 +295,155 @@ function reducer(state: GameState, action: GameAction): GameState {
     case 'LOG': {
       return { ...state, log: [action.payload, ...state.log].slice(0,200) }
     }
+    
+    // Skill Gem Management Cases
+    case 'UNLOCK_SKILL_GEM': {
+      const result = unlockSkillGem(state.player, action.payload)
+      if (result.success && result.updatedPlayer) {
+        const calculatedPlayer = calculatePlayerStats(result.updatedPlayer)
+        saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
+        return { 
+          ...state, 
+          player: calculatedPlayer, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      } else {
+        return { 
+          ...state, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      }
+    }
+    
+    case 'UNLOCK_SUPPORT_GEM': {
+      const result = unlockSupportGem(state.player, action.payload)
+      if (result.success && result.updatedPlayer) {
+        const calculatedPlayer = calculatePlayerStats(result.updatedPlayer)
+        saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
+        return { 
+          ...state, 
+          player: calculatedPlayer, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      } else {
+        return { 
+          ...state, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      }
+    }
+    
+    case 'LEVEL_UP_SKILL_GEM': {
+      const result = levelUpSkillGem(state.player, action.payload)
+      if (result.success && result.updatedPlayer) {
+        const calculatedPlayer = calculatePlayerStats(result.updatedPlayer)
+        saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
+        return { 
+          ...state, 
+          player: calculatedPlayer, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      } else {
+        return { 
+          ...state, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      }
+    }
+    
+    case 'LEVEL_UP_SUPPORT_GEM': {
+      const result = levelUpSupportGem(state.player, action.payload)
+      if (result.success && result.updatedPlayer) {
+        const calculatedPlayer = calculatePlayerStats(result.updatedPlayer)
+        saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
+        return { 
+          ...state, 
+          player: calculatedPlayer, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      } else {
+        return { 
+          ...state, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      }
+    }
+    
+    case 'EQUIP_SKILL_TO_BAR': {
+      const { skillId, slotIndex } = action.payload
+      const result = equipSkillToBar(state.player, skillId, slotIndex)
+      if (result.success && result.updatedPlayer) {
+        const calculatedPlayer = calculatePlayerStats(result.updatedPlayer)
+        saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
+        return { 
+          ...state, 
+          player: calculatedPlayer, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      } else {
+        return { 
+          ...state, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      }
+    }
+    
+    case 'UNEQUIP_SKILL_FROM_BAR': {
+      const result = unequipSkillFromBar(state.player, action.payload)
+      if (result.success && result.updatedPlayer) {
+        const calculatedPlayer = calculatePlayerStats(result.updatedPlayer)
+        saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
+        return { 
+          ...state, 
+          player: calculatedPlayer, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      } else {
+        return { 
+          ...state, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      }
+    }
+    
+    case 'ATTACH_SUPPORT_GEM': {
+      const { skillId, supportId } = action.payload
+      const result = attachSupportGem(state.player, skillId, supportId)
+      if (result.success && result.updatedPlayer) {
+        const calculatedPlayer = calculatePlayerStats(result.updatedPlayer)
+        saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
+        return { 
+          ...state, 
+          player: calculatedPlayer, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      } else {
+        return { 
+          ...state, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      }
+    }
+    
+    case 'DETACH_SUPPORT_GEM': {
+      const { skillId, supportId } = action.payload
+      const result = detachSupportGem(state.player, skillId, supportId)
+      if (result.success && result.updatedPlayer) {
+        const calculatedPlayer = calculatePlayerStats(result.updatedPlayer)
+        saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
+        return { 
+          ...state, 
+          player: calculatedPlayer, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      } else {
+        return { 
+          ...state, 
+          log: [result.message, ...state.log].slice(0, 200) 
+        }
+      }
+    }
+    
     default:
       return state
   }
@@ -308,7 +495,17 @@ export function GameProvider({ children }: GameProviderProps) {
     sellAll: () => dispatch({ type: 'SELL_ALL' }),
     upgradeSkill: (key: string) => dispatch({ type: 'UPGRADE_SKILL', payload: key }),
     resetAll: () => dispatch({ type: 'RESET' }),
-    log: (message: string) => dispatch({ type: 'LOG', payload: message })
+    log: (message: string) => dispatch({ type: 'LOG', payload: message }),
+    
+    // Skill Gem Management Actions
+    unlockSkillGem: (skillId: string) => dispatch({ type: 'UNLOCK_SKILL_GEM', payload: skillId }),
+    unlockSupportGem: (supportId: string) => dispatch({ type: 'UNLOCK_SUPPORT_GEM', payload: supportId }),
+    levelUpSkillGem: (skillId: string) => dispatch({ type: 'LEVEL_UP_SKILL_GEM', payload: skillId }),
+    levelUpSupportGem: (supportId: string) => dispatch({ type: 'LEVEL_UP_SUPPORT_GEM', payload: supportId }),
+    equipSkillToBar: (skillId: string, slotIndex: number) => dispatch({ type: 'EQUIP_SKILL_TO_BAR', payload: { skillId, slotIndex } }),
+    unequipSkillFromBar: (slotIndex: number) => dispatch({ type: 'UNEQUIP_SKILL_FROM_BAR', payload: slotIndex }),
+    attachSupportGem: (skillId: string, supportId: string) => dispatch({ type: 'ATTACH_SUPPORT_GEM', payload: { skillId, supportId } }),
+    detachSupportGem: (skillId: string, supportId: string) => dispatch({ type: 'DETACH_SUPPORT_GEM', payload: { skillId, supportId } })
   }
 
   return <GameContext.Provider value={{ state, actions, dispatch }}>{children}</GameContext.Provider>

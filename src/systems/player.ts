@@ -1,4 +1,5 @@
 import { Equipment, EquipmentSlot, Attribute, EquipmentStats } from './equipment'
+import { SkillGem, SupportGem, SkillBar, MAIN_SKILL_GEMS, SUPPORT_GEMS, createDefaultSkillGem, createDefaultSupportGem, createDefaultSkillBar } from './skillGems'
 
 export type Player = {
   level: number
@@ -26,6 +27,11 @@ export type Player = {
   // Calculated stats (derived from equipment and attributes)
   calculatedStats: EquipmentStats
   
+  // Skill Gem System
+  skillGems: SkillGem[]
+  supportGems: SupportGem[]
+  skillBar: SkillBar
+  
   // Base stats
   attackSpeed?: number
   projectileSpeed?: number
@@ -52,7 +58,7 @@ export const skillDescriptions = {
 
 export function defaultPlayer(): Player {
   return {
-    level: 1,
+    level: 10,
     xp: 0,
     nextLevelXp: 100,
     hp: 120,
@@ -62,7 +68,7 @@ export function defaultPlayer(): Player {
     dps: 2,
     baseDps: 2,
     gold: 0,
-    skillPoints: 0,
+    skillPoints: 20, // Starting with skill points for testing
     attributePoints: 5, // Starting attribute points
     
     // Starting attributes
@@ -82,6 +88,11 @@ export function defaultPlayer(): Player {
     
     // Calculated stats (will be computed)
     calculatedStats: {},
+    
+    // Skill Gem System - Initialize all skill gems and support gems
+    skillGems: MAIN_SKILL_GEMS.map(template => createDefaultSkillGem(template)),
+    supportGems: SUPPORT_GEMS.map(template => createDefaultSupportGem(template)),
+    skillBar: createDefaultSkillBar(),
     
     // Base stats
     attackSpeed: 1,

@@ -8,6 +8,8 @@ import InventoryPanel from './components/InventoryPanel'
 import CombatLogPanel from './components/CombatLogPanel'
 import CombatPanel from './components/CombatPanel'
 import Modal from './components/Modal'
+import { SkillGemPanel } from './components/SkillGemPanel'
+import { SkillBar } from './components/SkillBar'
 
 export default function App() {
   const [activeModal, setActiveModal] = useState<string | null>(null)
@@ -28,6 +30,8 @@ export default function App() {
         return <CharacterStatusPanel />
       case 'skills':
         return <SkillTreePanel />
+      case 'skillgems':
+        return <SkillGemPanel isOpen={true} onClose={closeModal} />
       case 'inventory':
         return <InventoryPanel />
       case 'log':
@@ -45,6 +49,8 @@ export default function App() {
         return 'Character Status'
       case 'skills':
         return 'Skill Tree'
+      case 'skillgems':
+        return 'Skill Gems'
       case 'inventory':
         return 'Inventory'
       case 'log':
@@ -68,6 +74,11 @@ export default function App() {
           {/* Game Canvas */}
           <div className="flex-1 flex items-center justify-center">
             <GameCanvas />
+          </div>
+          
+          {/* Skill Bar */}
+          <div className="mt-2">
+            <SkillBar />
           </div>
           
           {/* Combat Log */}
