@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useGame } from '../systems/gameContext'
 
-function rarityColor(r) {
+function rarityColor(r: string | undefined): string {
   if (!r) return '#9ca3af'
   if (r === 'Common') return '#9ca3af'
   if (r === 'Magic') return '#06b6d4'
@@ -11,9 +11,9 @@ function rarityColor(r) {
   return '#9ca3af'
 }
 
-function elementColor(element) {
+function elementColor(element: string | undefined): string {
   if (!element || element === 'physical') return ''
-  const colors = {
+  const colors: Record<string, string> = {
     fire: '#ff6b6b',
     ice: '#74c0fc',
     lightning: '#ffd43b',
@@ -22,9 +22,9 @@ function elementColor(element) {
   return colors[element] || ''
 }
 
-function formatElement(element) {
+function formatElement(element: string | undefined): string {
   if (!element || element === 'physical') return ''
-  const symbols = {
+  const symbols: Record<string, string> = {
     fire: '🔥',
     ice: '❄️',
     lightning: '⚡',
@@ -34,15 +34,22 @@ function formatElement(element) {
 }
 
 export default function InventoryPanel() {
-  const { state, dispatch } = useGame()
+  const { state, dispatch, actions } = useGame()
   const [currentPage, setCurrentPage] = useState(0)
   const [viewMode, setViewMode] = useState('list') // 'list' or 'grid'
   const itemsPerPage = viewMode === 'grid' ? 6 : 4
   const maxPages = 10
   
-  const sortedInventory = state.inventory.slice().sort((a,b)=> 
-    (['Legendary','Unique','Rare','Magic','Common'].indexOf(a.rarity) - ['Legendary','Unique','Rare','Magic','Common'].indexOf(b.rarity)) || (b.power - a.power)
-  )
+  const sortedInventory = state.inventory.slice().sort((a,b)=> {
+    const rarityOrder = ['Legendary','Unique','Rare','Magic','Common']
+    const rarityDiff = rarityOrder.indexOf(a.rarity) - rarityOrder.indexOf(b.rarity)
+    if (rarityDiff !== 0) return rarityDiff
+    
+    // Sort by power for legacy items, or by damage/armor for new items
+    const aPower = a.power || (a.baseStats?.damage) || (a.baseStats?.armor) || 0
+    const bPower = b.power || (b.baseStats?.damage) || (b.baseStats?.armor) || 0
+    return bPower - aPower
+  })
   
   const totalPages = Math.min(maxPages, Math.ceil(sortedInventory.length / itemsPerPage))
   const maxItems = maxPages * itemsPerPage
@@ -78,37 +85,27 @@ export default function InventoryPanel() {
           </button>
         </div>
       </div>
-      <div className="mb-3 text-yellow-400 text-sm">Gold: {Math.floor(state.player.gold)}</div>
+      <div className="mb-3 flex justify-between items-center">
+        <div className="text-yellow-400 text-sm">Gold: {Math.floor(state.player.gold)}</div>
+        {state.inventory.length > 0 && (
+          <button
+            onClick={() => {
+              if (window.confirm(`Sell all ${state.inventory.length} items for ${state.inventory.reduce((sum, item) => sum + (item.value || 0), 0)} gold?`)) {
+                actions.sellAll()
+              }
+            }}
+            className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 rounded text-xs transition-all text-black font-bold"
+          >
+            💰 Sell All
+          </button>
+        )}
+      </div>
       {excessItems > 0 && (
         <div className="mb-3 p-2 bg-orange-900/30 border border-orange-600/40 rounded text-orange-300 text-xs">
           ⚠️ {excessItems} excess items converted to gold automatically
         </div>
       )}
-      <div className="mb-4">
-        <div className="text-sm text-gray-400 mb-2">Equipped</div>
-        <div className="p-3 rounded bg-gray-700 border-l-4" style={{borderLeftColor: state.player.equipped ? rarityColor(state.player.equipped.rarity) : '#374151'}}>
-          {state.player.equipped ? (
-            <div>
-              <div className="font-bold" style={{color: rarityColor(state.player.equipped.rarity)}}>
-                {state.player.equipped.name} {formatElement(state.player.equipped.damageType)}
-              </div>
-              <div className="text-sm text-gray-300">
-                Power: {state.player.equipped.power} • {state.player.equipped.type}
-                {state.player.equipped.damageType && state.player.equipped.damageType !== 'physical' && (
-                  <span style={{color: elementColor(state.player.equipped.damageType)}}> • {state.player.equipped.damageType}</span>
-                )}
-              </div>
-              {state.player.equipped.extras && state.player.equipped.extras.length > 0 && (
-                <div className="text-xs text-blue-300 mt-1">
-                  {state.player.equipped.extras.map(e => `${e.key}: +${e.val}`).join(', ')}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="text-gray-400">None</div>
-          )}
-        </div>
-      </div>
+
 
       <div className="flex-1 flex flex-col">
         <div className="flex justify-between items-center mb-2">
@@ -121,26 +118,59 @@ export default function InventoryPanel() {
         </div>
         <div className={`flex-1 ${viewMode === 'grid' ? 'grid grid-cols-2 gap-2' : 'space-y-2'}`}>
           {displayInventory.length === 0 && <div className="text-gray-400 text-sm col-span-2">No items yet.</div>}
-          {currentItems.map((it) => (
+          {currentItems.map((it) => {
+            console.log('Inventory item:', it)
+            console.log('Item name:', it.name)
+            console.log('Item properties:', Object.keys(it))
+            return (
             <div key={it.id} className={`bg-gray-700 rounded border border-gray-600 ${
               viewMode === 'grid' ? 'p-2' : 'p-3'
             }`}>
               <div className={`${viewMode === 'grid' ? 'flex flex-col' : 'flex justify-between items-start'}`}>
                 <div className="flex-1">
                   <div className={`font-bold ${viewMode === 'grid' ? 'text-xs' : 'text-sm'}`} style={{color: rarityColor(it.rarity)}}>
-                    {viewMode === 'grid' ? it.name.split(' ').slice(0, 2).join(' ') : it.name} {formatElement(it.damageType)}
+                    {viewMode === 'grid' ? (it.name || 'Unnamed Item').split(' ').slice(0, 2).join(' ') : (it.name || 'Unnamed Item')} {formatElement(it.damageType)}
                   </div>
                   <div className={`text-gray-300 ${viewMode === 'grid' ? 'text-xs' : 'text-sm'}`}>
-                    Power: +{it.power} • {it.type}
+                    {/* Show new equipment stats */}
+                    {it.baseStats ? (
+                      <>
+                        {it.baseStats.damage && `Damage: ${Math.floor(it.baseStats.damage)}`}
+                        {it.baseStats.armor && `Armor: ${Math.floor(it.baseStats.armor)}`}
+                        {it.baseStats.health && ` • HP: +${Math.floor(it.baseStats.health)}`}
+                        {it.category && ` • ${it.category}`}
+                        {it.slot && ` • ${it.slot}`}
+                      </>
+                    ) : (
+                      /* Legacy equipment stats */
+                      <>
+                        Power: +{it.power} • {it.type}
+                      </>
+                    )}
                     {it.damageType && it.damageType !== 'physical' && (
                       <span style={{color: elementColor(it.damageType)}}> • {it.damageType}</span>
                     )}
                   </div>
-                  {it.extras && it.extras.length > 0 && viewMode === 'list' && (
+                  
+                  {/* Show affixes for new equipment or extras for legacy */}
+                  {it.affixes && it.affixes.length > 0 && viewMode === 'list' && (
                     <div className="text-xs text-blue-300 mt-1">
-                      {it.extras.map(e => `${e.key}: +${e.val}`).join(', ')}
+                      {it.affixes.map((a: any) => `${a.name}: +${a.value}`).join(', ')}
                     </div>
                   )}
+                  {it.extras && it.extras.length > 0 && viewMode === 'list' && (
+                    <div className="text-xs text-blue-300 mt-1">
+                      {it.extras.map((e: any) => `${e.key}: +${e.val}`).join(', ')}
+                    </div>
+                  )}
+                  
+                  {/* Show requirements if any */}
+                  {it.requirements && viewMode === 'list' && (
+                    <div className="text-xs text-orange-300 mt-1">
+                      Requires: {Object.entries(it.requirements).map(([attr, val]) => `${attr}: ${val}`).join(', ')}
+                    </div>
+                  )}
+                  
                   <div className={`text-yellow-400 mt-1 ${viewMode === 'grid' ? 'text-xs' : 'text-xs'}`}>
                     Value: {it.value} gold
                   </div>
@@ -165,7 +195,7 @@ export default function InventoryPanel() {
                 </div>
               </div>
             </div>
-          ))}
+          )})}
         </div>
         
         {/* Pagination Controls */}

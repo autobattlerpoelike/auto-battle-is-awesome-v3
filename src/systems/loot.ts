@@ -1,121 +1,53 @@
 import { DamageType } from './combat'
+import { generateEquipment, getEquipmentColor } from './equipmentGenerator'
+import { Equipment, RARITIES } from './equipment'
 
-const rarities = ['Common', 'Magic', 'Rare', 'Unique', 'Legendary']
-const elements: DamageType[] = ['physical', 'fire', 'ice', 'lightning', 'poison']
-
-const weaponNames = {
-  melee: {
-    physical: ['Sword', 'Axe', 'Mace', 'Dagger', 'Hammer'],
-    fire: ['Flame Blade', 'Inferno Sword', 'Burning Axe', 'Phoenix Dagger', 'Molten Hammer'],
-    ice: ['Frost Sword', 'Ice Blade', 'Frozen Axe', 'Glacial Dagger', 'Winter Hammer'],
-    lightning: ['Thunder Sword', 'Storm Blade', 'Lightning Axe', 'Spark Dagger', 'Volt Hammer'],
-    poison: ['Venom Blade', 'Toxic Sword', 'Poison Axe', 'Serpent Dagger', 'Plague Hammer']
-  },
-  ranged: {
-    physical: ['Bow', 'Crossbow', 'Longbow', 'Shortbow', 'Composite Bow'],
-    fire: ['Flame Bow', 'Inferno Crossbow', 'Phoenix Longbow', 'Burning Shortbow', 'Molten Bow'],
-    ice: ['Frost Bow', 'Ice Crossbow', 'Glacial Longbow', 'Winter Shortbow', 'Frozen Bow'],
-    lightning: ['Storm Bow', 'Thunder Crossbow', 'Lightning Longbow', 'Spark Shortbow', 'Volt Bow'],
-    poison: ['Venom Bow', 'Toxic Crossbow', 'Serpent Longbow', 'Poison Shortbow', 'Plague Bow']
-  }
-}
-
-function chooseRarity(level: number): string {
-  const r = Math.random()
-  // Higher levels have slightly better chances for rare items
-  const levelBonus = Math.min(0.05, level * 0.001)
+// Legacy support - convert new equipment to old format for compatibility
+function convertEquipmentToLegacyFormat(equipment: Equipment) {
+  // Calculate total power from base stats and affixes
+  let power = 0
   
-  if (r > (0.999 - levelBonus)) return 'Legendary'
-  if (r > (0.995 - levelBonus)) return 'Unique'
-  if (r > (0.92 - levelBonus)) return 'Rare'
-  if (r > (0.6 - levelBonus)) return 'Magic'
-  return 'Common'
-}
-
-function chooseElement(rarity: string): DamageType {
-  if (rarity === 'Common') return 'physical'
-  
-  const elementChance = {
-    'Magic': 0.3,
-    'Rare': 0.5,
-    'Unique': 0.7,
-    'Legendary': 0.9
+  // Add base damage if it exists
+  if (equipment.baseStats.damage) {
+    power += equipment.baseStats.damage
   }
   
-  if (Math.random() < (elementChance[rarity] || 0)) {
-    // Exclude physical for elemental weapons
-    const elementalTypes = elements.filter(e => e !== 'physical')
-    return elementalTypes[Math.floor(Math.random() * elementalTypes.length)]
-  }
-  
-  return 'physical'
-}
-
-function getWeaponName(type: string, element: DamageType, rarity: string): string {
-  const names = weaponNames[type]?.[element] || weaponNames.melee.physical
-  const baseName = names[Math.floor(Math.random() * names.length)]
-  
-  if (rarity === 'Legendary') {
-    const legendaryPrefixes = ['Godslayer', 'Worldbreaker', 'Eternal', 'Divine', 'Mythical']
-    const prefix = legendaryPrefixes[Math.floor(Math.random() * legendaryPrefixes.length)]
-    return `${prefix} ${baseName}`
-  }
-  
-  return baseName
-}
-
-function makeExtras(rarity: string, element: DamageType) {
-  const extras = []
-  
-  if (rarity === 'Common') return extras
-  
-  if (rarity === 'Magic') {
-    extras.push({key:'hp', val: 10 + Math.floor(Math.random()*10)})
-    if (element !== 'physical') {
-      extras.push({key:'elementalDamage', val: 2 + Math.floor(Math.random()*3)})
+  // Add affix bonuses to power calculation
+  equipment.affixes.forEach(affix => {
+    if (affix.stat === 'damage' || affix.stat === 'health' || affix.stat === 'armor') {
+      power += affix.value * 0.5 // Scale affix contribution
     }
-  }
+  })
   
-  if (rarity === 'Rare') {
-    extras.push({key:'hp', val: 15 + Math.floor(Math.random()*20)})
-    extras.push({key:'dps', val: 1 + Math.floor(Math.random()*3)})
-    if (element !== 'physical') {
-      extras.push({key:'elementalDamage', val: 3 + Math.floor(Math.random()*5)})
-    }
-  }
+  power = Math.max(1, Math.floor(power))
   
-  if (rarity === 'Unique') {
-    extras.push({key:'hp', val: 30 + Math.floor(Math.random()*40)})
-    extras.push({key:'dps', val: 3 + Math.floor(Math.random()*5)})
-    extras.push({key:'projectileSpeed', val: 0.5 + Math.random()*1.5})
-    if (element !== 'physical') {
-      extras.push({key:'elementalDamage', val: 5 + Math.floor(Math.random()*8)})
-    }
-    // Add special bonuses
-    if (Math.random() < 0.3) {
-      extras.push({key:'critChance', val: 0.02 + Math.random()*0.03})
-    }
-  }
+  // Convert affixes to legacy extras format
+  const extras = equipment.affixes.map(affix => ({
+    key: affix.stat === 'health' ? 'hp' : 
+         affix.stat === 'critChance' ? 'critChance' :
+         affix.stat === 'dodgeChance' ? 'dodgeChance' :
+         affix.stat === 'attackSpeed' ? 'projectileSpeed' :
+         affix.stat === 'lifeSteal' ? 'lifeSteal' :
+         affix.stat === 'damage' ? 'dps' :
+         affix.stat,
+    val: affix.value
+  }))
   
-  if (rarity === 'Legendary') {
-    extras.push({key:'hp', val: 50 + Math.floor(Math.random()*60)})
-    extras.push({key:'dps', val: 8 + Math.floor(Math.random()*12)})
-    extras.push({key:'projectileSpeed', val: 1.0 + Math.random()*2.0})
-    extras.push({key:'critChance', val: 0.05 + Math.random()*0.05})
-    extras.push({key:'dodgeChance', val: 0.03 + Math.random()*0.04})
-    if (element !== 'physical') {
-      extras.push({key:'elementalDamage', val: 10 + Math.floor(Math.random()*15)})
-    }
-    // Legendary items get multiple special bonuses
-    if (Math.random() < 0.5) {
-      extras.push({key:'lifeSteal', val: 0.05 + Math.random()*0.1})
-    }
-    if (Math.random() < 0.3) {
-      extras.push({key:'armor', val: 2 + Math.floor(Math.random()*5)})
-    }
-  }
+  // Determine type for legacy compatibility
+  const isRanged = ['bow', 'crossbow'].includes(equipment.type as string)
+  const legacyType = isRanged ? 'ranged' : 'melee'
   
-  return extras
+  return {
+    // Preserve all new equipment properties at the top level
+    ...equipment,
+    // Add legacy properties for backward compatibility
+    power,
+    type: legacyType, // Legacy type for old systems
+    element: equipment.damageType || 'physical',
+    extras,
+    rarityColor: getEquipmentColor(equipment.rarity),
+    elementColor: getElementColor(equipment.damageType || 'physical')
+  }
 }
 
 function getRarityColor(rarity: string): string {
@@ -139,47 +71,46 @@ function getElementColor(element: DamageType): string {
   }
 }
 
-export function generateLoot(level: number, fromBoss: boolean = false) {
-  let rarity = chooseRarity(level)
+// Test function to debug equipment generation
+export function testEquipmentGeneration() {
+  console.log('=== TESTING EQUIPMENT GENERATION ===')
+  const equipment = generateEquipment(1, false)
+  console.log('Raw equipment object:', equipment)
+  console.log('Equipment name:', equipment.name)
+  console.log('Equipment name type:', typeof equipment.name)
+  console.log('Equipment name length:', equipment.name?.length)
   
-  // Bosses have much better loot chances
-  if (fromBoss) {
-    const bossRoll = Math.random()
-    if (bossRoll > 0.7) rarity = 'Legendary'
-    else if (bossRoll > 0.4) rarity = 'Unique'
-    else if (bossRoll > 0.1) rarity = 'Rare'
-    else rarity = 'Magic'
+  const converted = convertEquipmentToLegacyFormat(equipment)
+  console.log('Converted equipment:', converted)
+  console.log('Converted name:', converted.name)
+  console.log('Converted name type:', typeof converted.name)
+  console.log('=== END TEST ===')
+  return converted
+}
+
+export function generateLoot(level: number, fromBoss: boolean = false): any[] {
+  const loot = []
+  
+  // Test equipment generation first
+  console.log('Testing equipment generation...')
+  testEquipmentGeneration()
+  
+  // Generate multiple equipment pieces to increase chance of getting different types
+  for (let i = 0; i < 3; i++) {
+    const equipment = generateEquipment(level, fromBoss)
+    console.log(`Generated equipment ${i + 1}:`, equipment)
+    console.log('Equipment name:', equipment.name)
+    console.log('Equipment name type:', typeof equipment.name)
+    console.log('Equipment slot:', equipment.slot)
+    console.log('Equipment category:', equipment.category)
+    
+    const convertedEquipment = convertEquipmentToLegacyFormat(equipment)
+    console.log('Converted equipment:', convertedEquipment)
+    console.log('Converted equipment name:', convertedEquipment.name)
+    console.log('Converted equipment name type:', typeof convertedEquipment.name)
+    
+    loot.push(convertedEquipment)
   }
   
-  const type = Math.random() > 0.6 ? 'ranged' : 'melee'
-  const element = chooseElement(rarity)
-  const weaponName = getWeaponName(type, element, rarity)
-  
-  const powerBase = Math.max(1, Math.floor(level * (1 + Math.random()*1.6)))
-  const multiplier = {
-    'Common': 1,
-    'Magic': 1.3,
-    'Rare': 1.8,
-    'Unique': 2.5,
-    'Legendary': 4.0
-  }[rarity] || 1
-  
-  const power = Math.max(1, Math.floor(powerBase * multiplier))
-  const extras = makeExtras(rarity, element)
-  
-  const elementText = element !== 'physical' ? ` [${element.toUpperCase()}]` : ''
-  const name = `${rarity} ${weaponName}${elementText} (L${level})`
-  
-  return {
-    id: 'it' + Math.floor(Math.random()*1000000),
-    name,
-    rarity,
-    power,
-    type,
-    element,
-    extras,
-    value: Math.max(1, Math.floor(level * power * (multiplier/1.5))),
-    rarityColor: getRarityColor(rarity),
-    elementColor: getElementColor(element)
-  }
+  return loot
 }

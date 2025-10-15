@@ -1,22 +1,74 @@
-import React, { createContext, useContext, useEffect, useReducer } from 'react'
+import React, { createContext, useContext, useEffect, useReducer, ReactNode } from 'react'
 import { Player, defaultPlayer, calculatePlayerStats } from './player'
-import { spawnEnemyForLevel } from './enemy'
+import { Enemy, spawnEnemyForLevel } from './enemy'
 import { simulateCombatTick } from './combat'
 import { generateLoot } from './loot'
 import { loadSave, saveState } from './save'
+import { Equipment, EquipmentSlot } from './equipment'
 
-const initialState = {
-  player: defaultPlayer(),
+// Type definitions
+interface GameState {
+  player: Player
+  enemies: Enemy[]
+  inventory: any[] // Keep as any[] for now since loot system returns mixed types
+  log: string[]
+  skills: Record<string, number>
+  autoCombat?: boolean
+}
+
+interface GameAction {
+  type: string
+  payload?: any
+}
+
+interface GameActions {
+  spawnEnemy: (level?: number, kind?: string) => void
+  simulateTick: (enemyId: string) => void
+  removeEnemy: (id: string) => void
+  equipItem: (id: string) => void
+  discardItem: (id: string) => void
+  sellAll: () => void
+  upgradeSkill: (key: string) => void
+  resetAll: () => void
+  log: (message: string) => void
+}
+
+interface GameContextType {
+  state: GameState
+  actions: GameActions
+  dispatch: React.Dispatch<GameAction>
+}
+
+interface GameProviderProps {
+  children: ReactNode
+}
+
+const initialState: GameState = {
+  player: calculatePlayerStats(defaultPlayer()),
   enemies: [spawnEnemyForLevel(1)],
   inventory: [],
   log: [],
   skills: {}
 }
 
-function reducer(state, action) {
+function reducer(state: GameState, action: GameAction): GameState {
   switch(action.type) {
-    case 'LOAD':
-      return { ...state, ...action.payload }
+    case 'LOAD': {
+      const payload = action.payload || {}
+      // Ensure player data is valid before loading
+      if (payload.player && typeof payload.player === 'object') {
+        // Ensure critical properties exist
+        if (typeof payload.player.gold !== 'number') {
+          payload.player.gold = 0
+        }
+        if (!payload.player.equipment || typeof payload.player.equipment !== 'object') {
+          payload.player.equipment = {}
+        }
+        // Recalculate player stats to ensure consistency
+        payload.player = calculatePlayerStats(payload.player)
+      }
+      return { ...state, ...payload }
+    }
     case 'SPAWN': {
       const level = action.payload?.level ?? Math.max(1, state.player.level + (Math.random() > 0.5 ? 1 : 0))
       const kind = action.payload?.kind
@@ -49,7 +101,8 @@ function reducer(state, action) {
       }
 
       if (res.enemyDefeated) {
-        const loot = generateLoot(target.level, target.isBoss)
+        const lootArray = generateLoot(target.level, target.isBoss)
+        const loot = lootArray[0] // Take the first item from the loot array
         newEnemies = newEnemies.filter(e => e.id !== enemyId)
         const lootMessage = target.isBoss ? `🎉 BOSS DEFEATED! Epic Loot: ${loot.name}` : `Enemy defeated! Loot: ${loot.name}`
         newLog.unshift(lootMessage)
@@ -100,7 +153,55 @@ function reducer(state, action) {
       const itemId = action.payload
       const item = state.inventory.find(i => i.id === itemId)
       if (!item) return state
-      const player = { ...state.player, equipped: item }
+      
+      // Debug logging
+      console.log('EQUIP action - item:', item)
+      console.log('Item slot:', item.slot)
+      console.log('Item category:', item.category)
+      
+      // Handle new equipment system
+      if (item.slot && item.category) {
+        console.log('Using new equipment system for slot:', item.slot)
+        
+        // Check if player can equip this item
+        const canEquipItem = !item.requirements || Object.entries(item.requirements).every(([attr, req]) => {
+          const playerAttr = state.player.attributes?.[attr as keyof typeof state.player.attributes] ?? 0
+          return playerAttr >= (req as number)
+        })
+        
+        if (!canEquipItem) {
+          console.log('Cannot equip item - requirements not met')
+          return state
+        }
+        
+        // Equip the item in the appropriate slot
+        const newEquipment = { ...state.player.equipment }
+        newEquipment[item.slot as EquipmentSlot] = item
+        
+        console.log('New equipment state:', newEquipment)
+        
+        const player = { ...state.player, equipment: newEquipment }
+        const calculatedPlayer = calculatePlayerStats(player)
+        saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
+        return { ...state, player: calculatedPlayer }
+      } else {
+        console.log('Using legacy equipment system')
+        // Legacy equipment system fallback
+        const player = { ...state.player, equipped: item }
+        const calculatedPlayer = calculatePlayerStats(player)
+        saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
+        return { ...state, player: calculatedPlayer }
+      }
+    }
+    case 'UNEQUIP': {
+      const slot = action.payload as EquipmentSlot
+      if (!slot || !state.player.equipment?.[slot]) return state
+      
+      // Remove the item from the equipment slot
+      const newEquipment = { ...state.player.equipment }
+      delete newEquipment[slot]
+      
+      const player = { ...state.player, equipment: newEquipment }
       const calculatedPlayer = calculatePlayerStats(player)
       saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
       return { ...state, player: calculatedPlayer }
@@ -110,6 +211,22 @@ function reducer(state, action) {
       const inv = state.inventory.filter(i => i.id !== id)
       saveState({ player: state.player, inventory: inv, enemies: state.enemies, skills: state.skills })
       return { ...state, inventory: inv }
+    }
+    case 'SELL_ALL': {
+      // Calculate total value of all equipment items
+      const totalValue = state.inventory.reduce((sum, item) => sum + (item.value || 0), 0)
+      
+      // Clear inventory and add gold to player
+      const player = { ...state.player, gold: (state.player.gold || 0) + totalValue }
+      const calculatedPlayer = calculatePlayerStats(player)
+      
+      saveState({ player: calculatedPlayer, inventory: [], enemies: state.enemies, skills: state.skills })
+      return { 
+        ...state, 
+        player: calculatedPlayer, 
+        inventory: [], 
+        log: [`Sold all items for ${totalValue} gold`, ...state.log].slice(0, 200) 
+      }
     }
     case 'UPGRADE_SKILL': {
       const key = action.payload
@@ -145,13 +262,13 @@ function reducer(state, action) {
   }
 }
 
-const GameContext = createContext({
+const GameContext = createContext<GameContextType>({
   state: initialState,
-  actions: {},
+  actions: {} as GameActions,
   dispatch: () => {}
 })
 
-export function GameProvider({ children }) {
+export function GameProvider({ children }: GameProviderProps) {
   const [state, dispatch] = useReducer(reducer, initialState)
 
   useEffect(() => {
@@ -182,15 +299,16 @@ export function GameProvider({ children }) {
     return () => clearInterval(tid)
   }, [state.enemies.length, state.skills])
 
-  const actions = {
-    spawnEnemy: (level, kind) => dispatch({ type: 'SPAWN', payload: { level, kind } }),
-    simulateTick: (enemyId) => dispatch({ type: 'TICK', payload: { enemyId } }),
-    removeEnemy: (id) => dispatch({ type: 'REMOVE', payload: id }),
-    equipItem: (id) => dispatch({ type: 'EQUIP', payload: id }),
-    discardItem: (id) => dispatch({ type: 'DISCARD', payload: id }),
-    upgradeSkill: (key) => dispatch({ type: 'UPGRADE_SKILL', payload: key }),
+  const actions: GameActions = {
+    spawnEnemy: (level?: number, kind?: string) => dispatch({ type: 'SPAWN', payload: { level, kind } }),
+    simulateTick: (enemyId: string) => dispatch({ type: 'TICK', payload: { enemyId } }),
+    removeEnemy: (id: string) => dispatch({ type: 'REMOVE', payload: id }),
+    equipItem: (id: string) => dispatch({ type: 'EQUIP', payload: id }),
+    discardItem: (id: string) => dispatch({ type: 'DISCARD', payload: id }),
+    sellAll: () => dispatch({ type: 'SELL_ALL' }),
+    upgradeSkill: (key: string) => dispatch({ type: 'UPGRADE_SKILL', payload: key }),
     resetAll: () => dispatch({ type: 'RESET' }),
-    log: (m) => dispatch({ type: 'LOG', payload: m })
+    log: (message: string) => dispatch({ type: 'LOG', payload: message })
   }
 
   return <GameContext.Provider value={{ state, actions, dispatch }}>{children}</GameContext.Provider>

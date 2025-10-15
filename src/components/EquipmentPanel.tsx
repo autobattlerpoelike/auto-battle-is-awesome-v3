@@ -1,5 +1,7 @@
 import React from 'react'
 import { useGame } from '../systems/gameContext'
+import { EQUIPMENT_SLOTS, getEquipmentColor } from '../systems/equipment'
+import { canEquip } from '../systems/equipmentGenerator'
 
 function rarityColor(r) {
   if (!r) return '#9ca3af'
@@ -33,35 +35,45 @@ function formatElement(element) {
   return symbols[element] || ''
 }
 
-const equipmentSlots = [
-  { id: 'weapon', name: 'Weapon', icon: '⚔️' },
-  { id: 'shield', name: 'Shield/Off-Hand', icon: '🛡️' },
-  { id: 'helm', name: 'Helm', icon: '⛑️' },
-  { id: 'bodyArmor', name: 'Body Armor', icon: '👕' },
-  { id: 'gloves', name: 'Gloves', icon: '🧤' },
-  { id: 'boots', name: 'Boots', icon: '👢' },
-  { id: 'ring', name: 'Ring', icon: '💍' },
-  { id: 'belt', name: 'Belt', icon: '🎒' }
-]
-
 export default function EquipmentPanel() {
-  const { state } = useGame()
+  const { state, dispatch } = useGame()
   const p = state.player
 
-  // Map equipped item to correct slot based on item type
+  // Get equipped item for a specific slot
   const getEquippedItem = (slotId) => {
-    if (!p.equipped) return null
+    console.log(`Getting equipped item for slot: ${slotId}`)
+    console.log('Player equipment:', p.equipment)
+    console.log('Player equipped (legacy):', p.equipped)
     
-    // Map item types to equipment slots
-    const itemType = p.equipped.type
-    
-    if (slotId === 'weapon' && (itemType === 'melee' || itemType === 'ranged')) {
-      return p.equipped
+    // Check new equipment system first
+    if (p.equipment && p.equipment[slotId]) {
+      console.log(`Found item in slot ${slotId}:`, p.equipment[slotId])
+      return p.equipment[slotId]
     }
     
-    // For now, only weapons are supported
-    // Future: Add armor, accessories, etc.
+    // Legacy support: map old equipped item to weapon slot
+    if (p.equipped && slotId === 'weapon') {
+      const itemType = p.equipped.type
+      if (itemType === 'melee' || itemType === 'ranged') {
+        console.log('Using legacy equipped item for weapon slot:', p.equipped)
+        return p.equipped
+      }
+    }
+    
+    console.log(`No item found for slot: ${slotId}`)
     return null
+  }
+
+  // Calculate total equipped items
+  const getEquippedCount = () => {
+    let count = 0
+    if (p.equipment) {
+      count += Object.keys(p.equipment).length
+    }
+    if (p.equipped && !p.equipment?.weapon) {
+      count += 1 // Legacy equipped item
+    }
+    return count
   }
 
   const renderEquipmentSlot = (slot) => {
@@ -80,6 +92,12 @@ export default function EquipmentPanel() {
           style={{
             borderColor: equippedItem ? rarityColor(equippedItem.rarity) : '#4b5563',
             boxShadow: equippedItem ? `0 0 15px ${rarityColor(equippedItem.rarity)}20` : 'none'
+          }}
+          onContextMenu={(e) => {
+            if (equippedItem) {
+              e.preventDefault()
+              dispatch({ type: 'UNEQUIP', payload: slot.id })
+            }
           }}
         >
           {equippedItem ? (
@@ -101,7 +119,9 @@ export default function EquipmentPanel() {
                 className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-900/80"
                 style={{ color: rarityColor(equippedItem.rarity) }}
               >
-                +{equippedItem.power}
+                {equippedItem.power ? `+${equippedItem.power}` : 
+                 equippedItem.baseStats?.damage ? `+${Math.floor(equippedItem.baseStats.damage)}` :
+                 '+?'}
               </div>
               
               {/* Element Indicator */}
@@ -155,18 +175,66 @@ export default function EquipmentPanel() {
               
               {/* Stats */}
               <div className="border-t border-gray-700 pt-2">
-                <div className="text-orange-400 font-medium">
-                  Power: +{equippedItem.power}
-                </div>
+                {/* Legacy power display */}
+                {equippedItem.power && (
+                  <div className="text-orange-400 font-medium">
+                    Power: +{equippedItem.power}
+                  </div>
+                )}
+                
+                {/* New equipment base stats */}
+                {equippedItem.baseStats && (
+                  <div className="text-orange-400 font-medium">
+                    <div className="text-xs text-gray-400 mb-1">Base Stats:</div>
+                    {Object.entries(equippedItem.baseStats).map(([stat, value]) => (
+                      <div key={stat} className="text-xs">
+                        {stat}: +{typeof value === 'number' ? Math.round(value * 100) / 100 : value}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Damage type */}
                 {equippedItem.damageType && equippedItem.damageType !== 'physical' && (
                   <div style={{ color: elementColor(equippedItem.damageType) }}>
                     Damage Type: {equippedItem.damageType}
                   </div>
                 )}
+                
+                {/* Requirements */}
+                {equippedItem.requirements && Object.keys(equippedItem.requirements).length > 0 && (
+                  <div className="mt-1 pt-1 border-t border-gray-700">
+                    <div className="text-xs text-gray-400 mb-1">Requirements:</div>
+                    {Object.entries(equippedItem.requirements).map(([attr, value]) => {
+                      const playerValue = p.attributes?.[attr] || 0
+                      const canMeet = playerValue >= value
+                      return (
+                        <div key={attr} className={`text-xs ${canMeet ? 'text-green-400' : 'text-red-400'}`}>
+                          {attr}: {value} ({playerValue})
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                
+                {/* Affixes */}
+                {equippedItem.affixes && equippedItem.affixes.length > 0 && (
+                  <div className="mt-1 pt-1 border-t border-gray-700">
+                    <div className="text-xs text-gray-400 mb-1">Affixes:</div>
+                    {equippedItem.affixes.map((affix, i) => (
+                      <div key={i} className="text-blue-300 text-xs">
+                        {affix.name}: +{Math.round(affix.value * 100) / 100}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Legacy extras */}
                 {equippedItem.extras && equippedItem.extras.length > 0 && (
                   <div className="mt-1 pt-1 border-t border-gray-700">
+                    <div className="text-xs text-gray-400 mb-1">Bonuses:</div>
                     {equippedItem.extras.map((e, i) => (
-                      <div key={i} className="text-blue-300">
+                      <div key={i} className="text-blue-300 text-xs">
                         {e.key}: +{e.val}
                       </div>
                     ))}
@@ -190,18 +258,19 @@ export default function EquipmentPanel() {
       {/* Equipment Grid */}
       <div className="flex-1 p-4">
         <div className="grid grid-cols-2 gap-3 h-full">
-          {equipmentSlots.map(slot => renderEquipmentSlot(slot))}
+          {EQUIPMENT_SLOTS.map(slot => renderEquipmentSlot(slot))}
         </div>
       </div>
       
       {/* Footer Info */}
       <div className="p-4 border-t border-gray-600">
         <div className="text-center text-sm text-gray-400">
-          {p.equipped ? (
-            <span>1 item equipped</span>
-          ) : (
-            <span>No equipment</span>
-          )}
+          {(() => {
+            const count = getEquippedCount()
+            if (count === 0) return <span>No equipment</span>
+            if (count === 1) return <span>1 item equipped</span>
+            return <span>{count} items equipped</span>
+          })()}
         </div>
       </div>
     </div>
