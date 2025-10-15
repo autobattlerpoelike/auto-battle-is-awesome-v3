@@ -8,6 +8,12 @@ interface Position {
   y: number
 }
 
+interface Camera {
+  x: number
+  y: number
+  zoom: number
+}
+
 interface Projectile {
   x: number
   y: number
@@ -62,6 +68,27 @@ export default function GameCanvas() {
   const [projectiles, setProjectiles] = useState<Projectile[]>([])
   const [effects, setEffects] = useState<Effect[]>([])
   const [dying, setDying] = useState<Record<string, number>>({})
+  const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1 })
+  const [idleAnimation, setIdleAnimation] = useState<number>(0)
+
+  // Isometric transformation functions
+  const worldToIso = (worldX: number, worldY: number): Position => {
+    const isoX = (worldX - worldY) * 0.866 // cos(30°)
+    const isoY = (worldX + worldY) * 0.5   // sin(30°)
+    return { x: isoX, y: isoY }
+  }
+
+  const isoToScreen = (isoPos: Position): Position => {
+    return {
+      x: (isoPos.x - camera.x) * camera.zoom + CANVAS_W / 2,
+      y: (isoPos.y - camera.y) * camera.zoom + CANVAS_H / 2
+    }
+  }
+
+  const worldToScreen = (worldX: number, worldY: number): Position => {
+    const iso = worldToIso(worldX, worldY)
+    return isoToScreen(iso)
+  }
 
   // Initialize enemy positions
   useEffect(() => {
@@ -121,27 +148,64 @@ export default function GameCanvas() {
     }
   }, [state.log, enemyPositions, playerPos])
 
+  // Collision detection function
+  const checkCollision = (pos1: Position, pos2: Position, radius1: number, radius2: number): boolean => {
+    const distance = dist(pos1, pos2)
+    return distance < (radius1 + radius2)
+  }
+
   // Main game loop
   useEffect(() => {
     let raf = 0, last = performance.now()
     function frame(now: number) {
       const dt = Math.min(40, now - last); last = now
 
-      // Move player towards nearest enemy
+      // Update idle animation
+      setIdleAnimation(now / 1000)
+
+      // Move player towards nearest enemy or idle movement
       if (state.enemies.length > 0) {
-        let nearest: {e: any, p: Position} | null = null, nd=9999
+        let nearestEnemy: any = null
+        let nearestPos: Position | null = null
+        let nd = 9999
         state.enemies.forEach(e => {
           const p = enemyPositions[e.id]
           if (!p) return;
           const d=dist(playerPos,p);
-          if (d<nd){nd=d; nearest={e,p}}
+          if (d<nd){nd=d; nearestEnemy=e; nearestPos=p}
         })
-        if (nearest) {
+        if (nearestEnemy && nearestPos) {
           const attackRange = (state.player.equipped?.type === 'ranged' ? 180 : 48)
-          if (nd > attackRange) setPlayerPos(p => clamp(moveTowards(p, nearest!.p, 1.1)))
-          else setPlayerPos(p => ({ x: p.x + Math.sin(now/300)*0.2, y: p.y + Math.cos(now/300)*0.2 }))
+          if (nd > attackRange) {
+            const newPos = clamp(moveTowards(playerPos, nearestPos, 1.1))
+            // Check collision with all enemies before moving
+            let canMove = true
+            state.enemies.forEach(e => {
+              const enemyPos = enemyPositions[e.id]
+              if (enemyPos && checkCollision(newPos, enemyPos, 16, 20)) {
+                canMove = false
+              }
+            })
+            if (canMove) setPlayerPos(newPos)
+          } else {
+            setPlayerPos(p => ({ x: p.x + Math.sin(now/300)*0.2, y: p.y + Math.cos(now/300)*0.2 }))
+          }
         }
+      } else {
+        // Idle movement animation when no enemies
+        setPlayerPos(p => ({
+          x: p.x + Math.sin(now / 2000) * 0.5,
+          y: p.y + Math.cos(now / 3000) * 0.3
+        }))
       }
+
+      // Update camera to follow player
+      const playerIso = worldToIso(playerPos.x, playerPos.y)
+      setCamera(cam => ({
+        x: cam.x + (playerIso.x - cam.x) * 0.1, // Smooth following
+        y: cam.y + (playerIso.y - cam.y) * 0.1,
+        zoom: cam.zoom
+      }))
 
       // Move enemies towards player
       setEnemyPositions(prev => {
@@ -155,7 +219,24 @@ export default function GameCanvas() {
           }
           // Move towards player
           const dx = playerPos.x - p.x, dy = playerPos.y - p.y, d = Math.hypot(dx,dy)||1
-          next[e.id] = { x: p.x + dx/d*0.3, y: p.y + dy/d*0.3 }
+          const newPos = { x: p.x + dx/d*0.3, y: p.y + dy/d*0.3 }
+          
+          // Check collision with player
+          if (!checkCollision(newPos, playerPos, 20, 16)) {
+            // Check collision with other enemies
+            let canMove = true
+            state.enemies.forEach(otherE => {
+              if (otherE.id !== e.id) {
+                const otherPos = next[otherE.id]
+                if (otherPos && checkCollision(newPos, otherPos, 20, 20)) {
+                  canMove = false
+                }
+              }
+            })
+            if (canMove) {
+              next[e.id] = newPos
+            }
+          }
         })
         return next
       })
@@ -187,7 +268,8 @@ export default function GameCanvas() {
 
     // draw enemies
     state.enemies.forEach((e, i) => {
-      const pos = enemyPositions[e.id] || { x: CANVAS_W - 120 - i * 28, y: CANVAS_H / 2 + i * 36 };
+      const worldPos = enemyPositions[e.id] || { x: CANVAS_W - 120 - i * 28, y: CANVAS_H / 2 + i * 36 };
+      const screenPos = worldToScreen(worldPos.x, worldPos.y);
       const dyingStart = dying[e.id];
       const alpha = e.hp <= 0 && dyingStart ? Math.max(0, 1 - ((Date.now() - dyingStart) / 1500)) : 1;
       ctx.save();
@@ -208,66 +290,82 @@ export default function GameCanvas() {
 
       // Draw enemy circle
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+      ctx.arc(screenPos.x, screenPos.y, radius * camera.zoom, 0, Math.PI * 2);
       ctx.fill();
 
       // Draw enemy type indicators
       ctx.fillStyle = '#ffffff';
       if (e.type === 'melee') {
         ctx.beginPath();
-        ctx.moveTo(pos.x - 8, pos.y - 18);
-        ctx.lineTo(pos.x - 2, pos.y - 26);
-        ctx.lineTo(pos.x + 4, pos.y - 18);
+        ctx.moveTo(screenPos.x - 8 * camera.zoom, screenPos.y - 18 * camera.zoom);
+        ctx.lineTo(screenPos.x - 2 * camera.zoom, screenPos.y - 26 * camera.zoom);
+        ctx.lineTo(screenPos.x + 4 * camera.zoom, screenPos.y - 18 * camera.zoom);
         ctx.fill();
       } else if (e.type === 'ranged') {
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y - 6, 6, Math.PI * 0.2, Math.PI * 0.8);
+        ctx.arc(screenPos.x, screenPos.y - 6 * camera.zoom, 6 * camera.zoom, Math.PI * 0.2, Math.PI * 0.8);
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#ffffff';
         ctx.stroke();
       } else {
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, radius + 6, 0, Math.PI * 2);
+        ctx.arc(screenPos.x, screenPos.y, (radius + 6) * camera.zoom, 0, Math.PI * 2);
         ctx.strokeStyle = 'rgba(255,255,255,0.06)';
         ctx.lineWidth = 2;
         ctx.stroke();
       }
 
       // Draw HP bar
-      drawHpBar(ctx, pos.x, pos.y - radius - 15, 40, 6, e.hp, e.maxHp, alpha);
+      drawHpBar(ctx, screenPos.x, screenPos.y - (radius + 15) * camera.zoom, 40 * camera.zoom, 6 * camera.zoom, e.hp, e.maxHp, alpha);
 
       // Draw level label
-      drawLabel(ctx, `Lv.${e.level}`, pos.x, pos.y - radius - 25, alpha);
+      drawLabel(ctx, `Lv.${e.level}`, screenPos.x, screenPos.y - (radius + 25) * camera.zoom, alpha);
 
       ctx.restore();
     });
 
     // draw player
+    const playerScreenPos = worldToScreen(playerPos.x, playerPos.y);
+    const playerSize = 32 * camera.zoom;
+    
+    // Add idle animation effect when no enemies
+    let animationOffset = 0;
+    if (state.enemies.length === 0) {
+      animationOffset = Math.sin(idleAnimation * 2) * 2 * camera.zoom;
+    }
+    
     ctx.fillStyle = '#000000';
-    ctx.fillRect(playerPos.x - 16, playerPos.y - 16, 32, 32);
+    ctx.fillRect(
+      playerScreenPos.x - playerSize/2, 
+      playerScreenPos.y - playerSize/2 + animationOffset, 
+      playerSize, 
+      playerSize
+    );
 
     // Draw player HP bar
-    drawHpBar(ctx, playerPos.x, playerPos.y - 35, 50, 8, state.player.hp, state.player.maxHp, 1);
+    drawHpBar(ctx, playerScreenPos.x, playerScreenPos.y - 35 * camera.zoom + animationOffset, 50 * camera.zoom, 8 * camera.zoom, state.player.hp, state.player.maxHp, 1);
 
     // Draw player level label
-    drawLabel(ctx, `Lv.${state.player.level}`, playerPos.x, playerPos.y - 50, 1);
+    drawLabel(ctx, `Lv.${state.player.level}`, playerScreenPos.x, playerScreenPos.y - 50 * camera.zoom + animationOffset, 1);
 
     // draw projectiles
     projectiles.forEach(p => {
+      const projectileScreenPos = worldToScreen(p.x, p.y);
       ctx.save();
       if (p.glow) {
         ctx.shadowColor = p.color;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 10 * camera.zoom;
       }
       ctx.fillStyle = p.color;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      ctx.arc(projectileScreenPos.x, projectileScreenPos.y, p.radius * camera.zoom, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     });
 
     // draw effects
     effects.forEach(e => {
+      const effectScreenPos = worldToScreen(e.x, e.y);
       const age = Date.now() - e.t;
       const progress = Math.min(1, age / e.ttl);
 
@@ -275,29 +373,29 @@ export default function GameCanvas() {
         ctx.save();
         ctx.globalAlpha = 1 - progress;
         ctx.fillStyle = e.color;
-        ctx.font = `${e.size || 16}px bold sans-serif`;
+        ctx.font = `${(e.size || 16) * camera.zoom}px bold sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText(e.text || '', e.x, e.y - progress * 20);
+        ctx.fillText(e.text || '', effectScreenPos.x, effectScreenPos.y - progress * 20 * camera.zoom);
         ctx.restore();
       } else if (e.kind === 'slash') {
         ctx.save();
         ctx.globalAlpha = 1 - progress;
         ctx.strokeStyle = e.color;
-        ctx.lineWidth = 3;
-        ctx.translate(e.x, e.y);
+        ctx.lineWidth = 3 * camera.zoom;
+        ctx.translate(effectScreenPos.x, effectScreenPos.y);
         ctx.rotate(e.angle || 0);
         ctx.beginPath();
-        ctx.moveTo(-15, 0);
-        ctx.lineTo(15, 0);
+        ctx.moveTo(-15 * camera.zoom, 0);
+        ctx.lineTo(15 * camera.zoom, 0);
         ctx.stroke();
         ctx.restore();
       } else if (e.kind === 'pickup') {
         ctx.save();
         ctx.globalAlpha = 1 - progress;
         ctx.fillStyle = e.color;
-        ctx.font = '14px sans-serif';
+        ctx.font = `${14 * camera.zoom}px sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText(e.text || '', e.x, e.y);
+        ctx.fillText(e.text || '', effectScreenPos.x, effectScreenPos.y);
         ctx.restore();
       } else if (e.kind === 'impact') {
         ctx.save();
