@@ -159,12 +159,24 @@ function generateAffixes(category: 'weapon' | 'armor' | 'accessory', rarity: str
     
     const selectedAffix = weightedRandom(unusedAffixes)
     
-    // Scale affix value by level and rarity
-    const scaledValue = selectedAffix.value * levelMultiplier * rarityMultiplier
+    // Scale affix value by level and rarity with random variation
+    const baseScaledValue = selectedAffix.value * levelMultiplier * rarityMultiplier
+    
+    // Add random variation to affix values (±10% to ±25% based on rarity)
+    const affixVariationRange = {
+      'Common': 0.10,
+      'Magic': 0.15,
+      'Rare': 0.18,
+      'Unique': 0.22,
+      'Legendary': 0.25
+    }[rarity] || 0.10
+    
+    const affixRandomVariation = 1 + (Math.random() * 2 - 1) * affixVariationRange
+    const finalAffixValue = baseScaledValue * affixRandomVariation
     
     selectedAffixes.push({
       ...selectedAffix,
-      value: Math.max(1, Math.round(scaledValue * 100) / 100) // Ensure minimum value of 1
+      value: Math.max(1, Math.round(finalAffixValue * 100) / 100) // Ensure minimum value of 1
     })
     
     usedStats.add(selectedAffix.stat)
@@ -282,7 +294,7 @@ export function generateEquipment(level: number, fromBoss: boolean = false): Equ
     requirements = { ...accessoryBase.requirements }
   }
   
-  // Scale base stats by level and rarity
+  // Scale base stats by level and rarity with random variation
   const rarityInfo = RARITIES[rarity as keyof typeof RARITIES]
   if (!rarityInfo) {
     console.warn('Invalid rarity:', rarity, 'defaulting to Common')
@@ -293,7 +305,20 @@ export function generateEquipment(level: number, fromBoss: boolean = false): Equ
   
   Object.keys(baseStats).forEach(stat => {
     if (typeof (baseStats as any)[stat] === 'number') {
-      (baseStats as any)[stat] = Math.round((baseStats as any)[stat] * levelMultiplier * rarityMultiplier * 100) / 100
+      // Add random variation to base stats (±15% for Common, up to ±35% for Legendary)
+      const variationRange = {
+        'Common': 0.15,
+        'Magic': 0.20,
+        'Rare': 0.25,
+        'Unique': 0.30,
+        'Legendary': 0.35
+      }[rarity] || 0.15
+      
+      // Generate random multiplier between (1 - variation) and (1 + variation)
+      const randomVariation = 1 + (Math.random() * 2 - 1) * variationRange
+      
+      const finalValue = (baseStats as any)[stat] * levelMultiplier * rarityMultiplier * randomVariation
+      ;(baseStats as any)[stat] = Math.round(finalValue * 100) / 100
     }
   })
   

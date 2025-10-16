@@ -46,11 +46,13 @@ function formatElement(element: DamageType | undefined): string {
 const EquipmentSlotComponent = memo(({ 
   slot, 
   equippedItem, 
-  onUnequip 
+  onUnequip,
+  player
 }: { 
   slot: any
   equippedItem: any
-  onUnequip: (slotId: string) => void 
+  onUnequip: (slotId: string) => void
+  player: any
 }) => {
   const handleUnequip = useCallback((e: React.MouseEvent) => {
     if (equippedItem) {
@@ -181,7 +183,7 @@ const EquipmentSlotComponent = memo(({
                 <div className="mt-1 pt-1 border-t border-gray-700">
                   <div className="text-xs text-gray-400 mb-1">Requirements:</div>
                   {Object.entries(equippedItem.requirements).map(([attr, value]) => {
-                    const playerValue = (state.player.attributes as any)?.[attr] || 0
+                    const playerValue = (player.attributes as any)?.[attr] || 0
                     const canMeet = playerValue >= (value as number)
                     return (
                       <div key={attr} className={`text-xs ${canMeet ? 'text-green-400' : 'text-red-400'}`}>
@@ -278,6 +280,7 @@ const EquipmentPanel = memo(function EquipmentPanel() {
         slot={slot}
         equippedItem={equippedItem}
         onUnequip={handleUnequip}
+        player={p}
       />
     )
   }, [getEquippedItem, handleUnequip])

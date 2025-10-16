@@ -147,6 +147,93 @@ body {
   background: var(--bg-secondary);
 }
 
+/* Search and Filter Controls */
+.search-filter-controls {
+  padding: 15px 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.search-bar {
+  margin-bottom: 15px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px 15px;
+  background: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  transition: border-color 0.2s;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.tag-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-label {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.tag-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag-filter-btn {
+  padding: 4px 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tag-filter-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.tag-filter-btn.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
+.clear-filters-btn {
+  padding: 4px 10px;
+  background: #ef4444;
+  border: 1px solid #ef4444;
+  border-radius: 16px;
+  color: white;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-filters-btn:hover {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
 .panel-content {
   flex: 1;
   display: flex;
@@ -184,8 +271,8 @@ body {
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
-  align-items: center;
-  gap: 15px;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .skill-card:hover, .support-card:hover {
@@ -221,6 +308,12 @@ body {
   border: 1px solid var(--border-color);
 }
 
+.skill-card-header, .support-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .skill-info, .support-info {
   flex: 1;
 }
@@ -230,6 +323,12 @@ body {
   color: var(--text-primary);
   font-size: 1rem;
   font-weight: 500;
+}
+
+.skill-card-content, .support-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .locked-text {
@@ -249,6 +348,101 @@ body {
   border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 500;
+}
+
+/* Skill Tags */
+.skill-tags, .support-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.skill-tag, .support-tag {
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  border: 1px solid var(--border-color);
+}
+
+/* Rarity Colors */
+.rarity-common {
+  border-color: #9ca3af;
+  color: #9ca3af;
+}
+
+.rarity-uncommon {
+  border-color: #10b981;
+  color: #10b981;
+}
+
+.rarity-rare {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.rarity-epic {
+  border-color: #8b5cf6;
+  color: #8b5cf6;
+}
+
+.rarity-legendary {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+/* Quality Bar */
+.quality-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.quality-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.quality-progress {
+  flex: 1;
+  height: 4px;
+  background: var(--bg-primary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.quality-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #3b82f6);
+  transition: width 0.3s ease;
+}
+
+/* Compatibility Indicators */
+.compatibility-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.compatibility-icon {
+  font-size: 0.8rem;
+}
+
+.compatible {
+  color: var(--accent-tertiary);
+}
+
+.incompatible {
+  color: #ef4444;
+}
+
+.compatibility-text {
+  font-size: 0.7rem;
+  color: var(--text-muted);
 }
 
 .unlock-requirements {

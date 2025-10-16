@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { useGame } from '../systems/gameContext'
-import { SkillGem, SupportGem, getSkillUnlockCost, getSkillLevelUpCost, canLevelUpSkill, getScaledSkillDamage, getScaledManaCost, getScaledCooldown, getScaledArea, getScaledDuration, getScaledSupportGemValue, getScaledSupportGemModifiers, applyModifiersToSkill } from '../systems/skillGems'
+import { SkillGem, SupportGem, getSkillUnlockCost, getSkillLevelUpCost, canLevelUpSkill, getScaledSkillDamage, getScaledManaCost, getScaledCooldown, getScaledArea, getScaledDuration, getScaledSupportGemValue, getScaledSupportGemModifiers, applyModifiersToSkill, getSkillTagsDisplay, isCompatibleSupport, GEM_RARITY_BONUSES } from '../systems/skillGems'
 import { getAvailableSkills, getUnlockedSkills, getAvailableSupportGems, getUnlockedSupportGems } from '../systems/skillManager'
 
 interface SkillGemPanelProps {
@@ -15,96 +15,135 @@ export const SkillGemPanel = React.memo(function SkillGemPanel({ isOpen, onClose
   const [activeTab, setActiveTab] = useState<TabType>('skills')
   const [selectedSkill, setSelectedSkill] = useState<SkillGem | null>(null)
   const [selectedSupport, setSelectedSupport] = useState<SupportGem | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
 
-  // Memoize expensive skill calculations
+  // Filter functions
+  const filterSkills = (skills: SkillGem[]) => {
+    return skills.filter(skill => {
+      const matchesSearch = skill.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           skill.description.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesTags = selectedTags.size === 0 || 
+                         skill.tags.some(tag => selectedTags.has(tag));
+      return matchesSearch && matchesTags;
+    });
+  };
+
+  const filterSupports = (supports: SupportGem[]) => {
+    return supports.filter(support => {
+      const matchesSearch = support.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           support.description.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesSearch;
+    });
+  };
+
   const skillData = useMemo(() => ({
-    availableSkills: getAvailableSkills(state.player),
-    unlockedSkills: getUnlockedSkills(state.player),
-    availableSupports: getAvailableSupportGems(state.player),
-    unlockedSupports: getUnlockedSupportGems(state.player)
-  }), [state.player.skillGems, state.player.supportGems, state.player.level, state.player.skillPoints])
+    availableSkills: filterSkills(getAvailableSkills(state.player)),
+    unlockedSkills: filterSkills(getUnlockedSkills(state.player)),
+    availableSupports: filterSupports(getAvailableSupportGems(state.player)),
+    unlockedSupports: filterSupports(getUnlockedSupportGems(state.player))
+  }), [state.player, searchTerm, selectedTags])
 
-  if (!isOpen) return null
+  // Get all available tags for filtering
+  const allTags = useMemo(() => {
+    const tags = new Set<string>();
+    [...getAvailableSkills(state.player), ...getUnlockedSkills(state.player)].forEach(skill => {
+      skill.tags.forEach(tag => tags.add(tag));
+    });
+    return Array.from(tags).sort();
+  }, [state.player])
 
   const handleUnlockSkill = useCallback((skillId: string) => {
     actions.unlockSkillGem(skillId)
-    setSelectedSkill(null)
-  }, [actions])
-
-  const handleUnlockSupport = useCallback((supportId: string) => {
-    actions.unlockSupportGem(supportId)
-    setSelectedSupport(null)
   }, [actions])
 
   const handleLevelUpSkill = useCallback((skillId: string) => {
     actions.levelUpSkillGem(skillId)
   }, [actions])
 
+  const handleUnlockSupport = useCallback((supportId: string) => {
+    actions.unlockSupportGem(supportId)
+  }, [actions])
+
   const handleLevelUpSupport = useCallback((supportId: string) => {
     actions.levelUpSupportGem(supportId)
   }, [actions])
 
-  const handleEquipSkill = (skillId: string) => {
-    // Find first empty slot in skill bar
-    const skillBar = state.player.skillBar
-    if (!skillBar?.slots) return
-    
-    const emptySlotIndex = skillBar.slots.findIndex(slot => slot === null)
-    if (emptySlotIndex !== -1) {
-      actions.equipSkillToBar(skillId, emptySlotIndex)
+  if (!isOpen) return null
+
+  const getRarityColor = (rarity: string) => {
+    const colors = {
+      'Normal': '#ffffff',
+      'Magic': '#8888ff',
+      'Rare': '#ffff88',
+      'Unique': '#ff8800'
     }
+    return colors[rarity as keyof typeof colors] || '#ffffff'
   }
 
-  const handleUnequipSkill = (skillId: string) => {
-    // Find the skill in the skill bar and unequip it
-    const skillBar = state.player.skillBar
-    if (!skillBar?.slots) return
-    
-    const equippedSlotIndex = skillBar.slots.findIndex(slot => slot?.id === skillId)
-    if (equippedSlotIndex !== -1) {
-      actions.unequipSkillFromBar(equippedSlotIndex)
-    }
-  }
-
-  const renderSkillCard = (skill: SkillGem, isLocked: boolean = false) => {
-    const canUnlock = !isLocked && state.player.level >= skill.unlockLevel && state.player.skillPoints >= getSkillUnlockCost(skill)
-    const canLevel = !isLocked && canLevelUpSkill(skill, state.player.skillPoints)
-    // Check if skill is equipped by looking at the skill bar directly
-    const isEquipped = state.player.skillBar?.slots?.some(slot => slot?.id === skill.id) || false
+  const renderSkillCard = (skill: SkillGem, isLocked: boolean) => {
+    const unlockCost = getSkillUnlockCost(skill)
+    const levelUpCost = getSkillLevelUpCost(skill.level)
+    const canLevel = canLevelUpSkill(skill, state.player.skillPoints)
+    const isSelected = selectedSkill?.id === skill.id
+    const rarityBonus = GEM_RARITY_BONUSES[skill.rarity]
 
     return (
-      <div
-        key={skill.id}
-        className={`skill-card ${isLocked ? 'locked' : 'unlocked'} ${selectedSkill?.id === skill.id ? 'selected' : ''}`}
+      <div 
+        key={skill.id} 
+        className={`skill-card ${isLocked ? 'locked' : ''} ${isSelected ? 'selected' : ''}`}
         onClick={() => setSelectedSkill(skill)}
+        style={{ borderColor: getRarityColor(skill.rarity) }}
       >
-        <div className="skill-icon">{skill.icon}</div>
-        <div className="skill-info">
-          <h4 className={isLocked ? 'locked-text' : ''}>{skill.name}</h4>
-          <p className="skill-level">Level {skill.level}/{skill.maxLevel}</p>
-          {isEquipped && <span className="equipped-badge">Equipped</span>}
-          {isLocked && (
-            <div className="unlock-requirements">
-              <p>Requires Level {skill.unlockLevel}</p>
-              <p>Cost: {getSkillUnlockCost(skill)} SP</p>
+        <div className="skill-header">
+          <span className="skill-icon">{skill.icon}</span>
+          <div className="skill-info">
+            <h4 className="skill-name" style={{ color: getRarityColor(skill.rarity) }}>
+              {skill.name}
+            </h4>
+            <div className="skill-meta">
+              <span className="skill-level">Lv.{skill.level}/{skill.maxLevel}</span>
+              {skill.quality > 0 && (
+                <span className="skill-quality">Q: {skill.quality}%</span>
+              )}
+              <span className="skill-rarity">{skill.rarity}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="skill-tags">
+          {skill.tags.slice(0, 3).map(tag => (
+            <span key={tag} className={`skill-tag tag-${tag.toLowerCase()}`}>
+              {tag}
+            </span>
+          ))}
+          {skill.tags.length > 3 && <span className="skill-tag-more">+{skill.tags.length - 3}</span>}
+        </div>
+
+        <div className="skill-stats-preview">
+          <div className="stat-item">
+            <span className="stat-label">Damage:</span>
+            <span className="stat-value">{getScaledSkillDamage(skill)}</span>
+          </div>
+          {skill.supportGems.length > 0 && (
+            <div className="stat-item">
+              <span className="stat-label">Supports:</span>
+              <span className="stat-value">{skill.supportGems.length}/6</span>
             </div>
           )}
-          {!isLocked && skill.level < skill.maxLevel && (
-            <p className="level-up-cost">
-              Level up cost: {getSkillLevelUpCost(skill.level)} SP
-            </p>
-          )}
         </div>
+
         <div className="skill-actions">
-          {isLocked && canUnlock && (
+          {isLocked && (
             <button 
               className="unlock-btn"
+              disabled={state.player.skillPoints < unlockCost}
               onClick={(e) => {
                 e.stopPropagation()
                 handleUnlockSkill(skill.id)
               }}
             >
-              Unlock
+              Unlock ({unlockCost} SP)
             </button>
           )}
           {!isLocked && canLevel && (
@@ -115,72 +154,72 @@ export const SkillGemPanel = React.memo(function SkillGemPanel({ isOpen, onClose
                 handleLevelUpSkill(skill.id)
               }}
             >
-              Level Up
+              Level Up ({levelUpCost} SP)
             </button>
           )}
-          {!isLocked && !isEquipped && (
-            <button 
-              className="equip-btn"
-              onClick={(e) => {
-                e.stopPropagation()
-                handleEquipSkill(skill.id)
-              }}
-            >
-              Equip
-            </button>
-          )}
-          {!isLocked && isEquipped && (
-            <button 
-              className="unequip-btn"
-              onClick={(e) => {
-                e.stopPropagation()
-                handleUnequipSkill(skill.id)
-              }}
-            >
-              Unequip
-            </button>
+          {!isLocked && skill.isEquipped && (
+            <span className="equipped-indicator">⚡ Equipped</span>
           )}
         </div>
       </div>
     )
   }
 
-  const renderSupportCard = (support: SupportGem, isLocked: boolean = false) => {
-    const canUnlock = !isLocked && state.player.level >= support.unlockLevel && state.player.skillPoints >= getSkillUnlockCost(support)
-    const canLevel = !isLocked && canLevelUpSkill(support, state.player.skillPoints)
+  const renderSupportCard = (support: SupportGem, isLocked: boolean) => {
+    const unlockCost = getSkillUnlockCost(support)
+    const levelUpCost = getSkillLevelUpCost(support.level)
+    const canLevel = canLevelUpSkill(support, state.player.skillPoints)
+    const isSelected = selectedSupport?.id === support.id
+    const compatibleSkills = skillData.unlockedSkills.filter(skill => isCompatibleSupport(skill, support))
 
     return (
-      <div
-        key={support.id}
-        className={`support-card ${isLocked ? 'locked' : 'unlocked'} ${selectedSupport?.id === support.id ? 'selected' : ''}`}
+      <div 
+        key={support.id} 
+        className={`support-card ${isLocked ? 'locked' : ''} ${isSelected ? 'selected' : ''}`}
         onClick={() => setSelectedSupport(support)}
+        style={{ borderColor: getRarityColor(support.rarity) }}
       >
-        <div className="support-icon">{support.icon}</div>
-        <div className="support-info">
-          <h4 className={isLocked ? 'locked-text' : ''}>{support.name}</h4>
-          <p className="support-level">Level {support.level}/{support.maxLevel}</p>
-          {isLocked && (
-            <div className="unlock-requirements">
-              <p>Requires Level {support.unlockLevel}</p>
-              <p>Cost: {getSkillUnlockCost(support)} SP</p>
+        <div className="support-header">
+          <span className="support-icon">{support.icon}</span>
+          <div className="support-info">
+            <h4 className="support-name" style={{ color: getRarityColor(support.rarity) }}>
+              {support.name}
+            </h4>
+            <div className="support-meta">
+              <span className="support-level">Lv.{support.level}/{support.maxLevel}</span>
+              {support.quality > 0 && (
+                <span className="support-quality">Q: {support.quality}%</span>
+              )}
+              <span className="support-rarity">{support.rarity}</span>
             </div>
-          )}
-          {!isLocked && support.level < support.maxLevel && (
-            <p className="level-up-cost">
-              Level up cost: {getSkillLevelUpCost(support.level)} SP
-            </p>
-          )}
+          </div>
         </div>
+
+        <div className="support-tags">
+          {support.tags.slice(0, 3).map(tag => (
+            <span key={tag} className={`support-tag tag-${tag.toLowerCase()}`}>
+              {tag}
+            </span>
+          ))}
+          {support.tags.length > 3 && <span className="support-tag-more">+{support.tags.length - 3}</span>}
+        </div>
+
+        <div className="support-compatibility">
+          <span className="compatibility-label">Compatible with:</span>
+          <span className="compatibility-count">{compatibleSkills.length} skills</span>
+        </div>
+
         <div className="support-actions">
-          {isLocked && canUnlock && (
+          {isLocked && (
             <button 
               className="unlock-btn"
+              disabled={state.player.skillPoints < unlockCost}
               onClick={(e) => {
                 e.stopPropagation()
                 handleUnlockSupport(support.id)
               }}
             >
-              Unlock
+              Unlock ({unlockCost} SP)
             </button>
           )}
           {!isLocked && canLevel && (
@@ -191,7 +230,7 @@ export const SkillGemPanel = React.memo(function SkillGemPanel({ isOpen, onClose
                 handleLevelUpSupport(support.id)
               }}
             >
-              Level Up
+              Level Up ({levelUpCost} SP)
             </button>
           )}
         </div>
@@ -212,85 +251,176 @@ export const SkillGemPanel = React.memo(function SkillGemPanel({ isOpen, onClose
     
     const finalValues = applyModifiersToSkill(selectedSkill)
     const hasSupports = selectedSkill.supportGems.length > 0
+    const rarityBonus = GEM_RARITY_BONUSES[selectedSkill.rarity]
 
     return (
       <div className="skill-details">
-        <h3>{selectedSkill.name}</h3>
-        <p className="skill-description">{selectedSkill.description}</p>
-        <div className="skill-stats">
-          <p><strong>Type:</strong> {selectedSkill.type}</p>
-          <p><strong>Category:</strong> {selectedSkill.category}</p>
-          <p><strong>Level:</strong> {selectedSkill.level}/{selectedSkill.maxLevel}</p>
-          
-          {baseValues.damage > 0 && (
-            <p><strong>Damage:</strong> {hasSupports ? (
-              <span>
-                <span className="base-value">{baseValues.damage}</span>
-                {finalValues.damage !== baseValues.damage && (
-                  <span className="final-value"> → {finalValues.damage}</span>
-                )}
-              </span>
-            ) : baseValues.damage}</p>
-          )}
-          
-          <p><strong>Mana Cost:</strong> {hasSupports ? (
-            <span>
-              <span className="base-value">{baseValues.manaCost}</span>
-              {finalValues.manaCost !== baseValues.manaCost && (
-                <span className="final-value"> → {finalValues.manaCost}</span>
-              )}
+        <div className="skill-details-header">
+          <h3 style={{ color: getRarityColor(selectedSkill.rarity) }}>
+            {selectedSkill.icon} {selectedSkill.name}
+          </h3>
+          <div className="skill-details-meta">
+            <span className="detail-rarity" style={{ color: getRarityColor(selectedSkill.rarity) }}>
+              {selectedSkill.rarity}
             </span>
-          ) : baseValues.manaCost}</p>
-          
-          <p><strong>Cooldown:</strong> {hasSupports ? (
-            <span>
-              <span className="base-value">{baseValues.cooldown}ms</span>
-              {finalValues.cooldown !== baseValues.cooldown && (
-                <span className="final-value"> → {finalValues.cooldown}ms</span>
-              )}
-            </span>
-          ) : `${baseValues.cooldown}ms`}</p>
-          
-          {baseValues.area > 1 && (
-            <p><strong>Area:</strong> {hasSupports ? (
-              <span>
-                <span className="base-value">{baseValues.area.toFixed(1)}x</span>
-                {finalValues.area !== baseValues.area && (
-                  <span className="final-value"> → {finalValues.area.toFixed(1)}x</span>
-                )}
-              </span>
-            ) : `${baseValues.area.toFixed(1)}x`}</p>
-          )}
-          
-          {baseValues.duration > 0 && (
-            <p><strong>Duration:</strong> {hasSupports ? (
-              <span>
-                <span className="base-value">{(baseValues.duration / 1000).toFixed(1)}s</span>
-                {finalValues.duration !== baseValues.duration && (
-                  <span className="final-value"> → {(finalValues.duration / 1000).toFixed(1)}s</span>
-                )}
-              </span>
-            ) : `${(baseValues.duration / 1000).toFixed(1)}s`}</p>
-          )}
-          
-          {finalValues.projectileCount > 1 && (
-            <p><strong>Projectiles:</strong> {finalValues.projectileCount}</p>
-          )}
+            {selectedSkill.quality > 0 && (
+              <span className="detail-quality">Quality: {selectedSkill.quality}%</span>
+            )}
+          </div>
         </div>
+
+        <p className="skill-description">{selectedSkill.description}</p>
+        
+        <div className="skill-tags-full">
+          <h4>Tags:</h4>
+          <div className="tags-container">
+            {selectedSkill.tags.map(tag => (
+              <span key={tag} className={`skill-tag tag-${tag.toLowerCase()}`}>
+                {tag}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="skill-stats">
+          <h4>Statistics:</h4>
+          <div className="stats-grid">
+            <div className="stat-row">
+              <span className="stat-label">Type:</span>
+              <span className="stat-value">{selectedSkill.type}</span>
+            </div>
+            <div className="stat-row">
+              <span className="stat-label">Category:</span>
+              <span className="stat-value">{selectedSkill.category}</span>
+            </div>
+            <div className="stat-row">
+              <span className="stat-label">Level:</span>
+              <span className="stat-value">{selectedSkill.level}/{selectedSkill.maxLevel}</span>
+            </div>
+            
+            {baseValues.damage > 0 && (
+              <div className="stat-row">
+                <span className="stat-label">Damage:</span>
+                <span className="stat-value">
+                  {hasSupports ? (
+                    <>
+                      <span className="base-value">{baseValues.damage}</span>
+                      {finalValues.damage !== baseValues.damage && (
+                        <span className="final-value"> → {finalValues.damage}</span>
+                      )}
+                    </>
+                  ) : baseValues.damage}
+                </span>
+              </div>
+            )}
+            
+            <div className="stat-row">
+              <span className="stat-label">Mana Cost:</span>
+              <span className="stat-value">
+                {hasSupports ? (
+                  <>
+                    <span className="base-value">{baseValues.manaCost}</span>
+                    {finalValues.manaCost !== baseValues.manaCost && (
+                      <span className="final-value"> → {finalValues.manaCost}</span>
+                    )}
+                  </>
+                ) : baseValues.manaCost}
+              </span>
+            </div>
+            
+            <div className="stat-row">
+              <span className="stat-label">Cooldown:</span>
+              <span className="stat-value">
+                {hasSupports ? (
+                  <>
+                    <span className="base-value">{baseValues.cooldown}ms</span>
+                    {finalValues.cooldown !== baseValues.cooldown && (
+                      <span className="final-value"> → {finalValues.cooldown}ms</span>
+                    )}
+                  </>
+                ) : `${baseValues.cooldown}ms`}
+              </span>
+            </div>
+            
+            {baseValues.area > 1 && (
+              <div className="stat-row">
+                <span className="stat-label">Area:</span>
+                <span className="stat-value">
+                  {hasSupports ? (
+                    <>
+                      <span className="base-value">{baseValues.area.toFixed(1)}x</span>
+                      {finalValues.area !== baseValues.area && (
+                        <span className="final-value"> → {finalValues.area.toFixed(1)}x</span>
+                      )}
+                    </>
+                  ) : `${baseValues.area.toFixed(1)}x`}
+                </span>
+              </div>
+            )}
+            
+            {baseValues.duration > 0 && (
+              <div className="stat-row">
+                <span className="stat-label">Duration:</span>
+                <span className="stat-value">
+                  {hasSupports ? (
+                    <>
+                      <span className="base-value">{(baseValues.duration / 1000).toFixed(1)}s</span>
+                      {finalValues.duration !== baseValues.duration && (
+                        <span className="final-value"> → {(finalValues.duration / 1000).toFixed(1)}s</span>
+                      )}
+                    </>
+                  ) : `${(baseValues.duration / 1000).toFixed(1)}s`}
+                </span>
+              </div>
+            )}
+            
+            {finalValues.projectileCount > 1 && (
+              <div className="stat-row">
+                <span className="stat-label">Projectiles:</span>
+                <span className="stat-value">{finalValues.projectileCount}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {rarityBonus.damageBonus > 0 && (
+          <div className="rarity-bonuses">
+            <h4>Rarity Bonuses:</h4>
+            <div className="bonus-list">
+              {rarityBonus.damageBonus > 0 && (
+                <div className="bonus-item">+{rarityBonus.damageBonus}% damage</div>
+              )}
+              {rarityBonus.qualityBonus > 0 && (
+                <div className="bonus-item">+{rarityBonus.qualityBonus}% quality</div>
+              )}
+              {rarityBonus.areaOfEffectBonus && (
+                <div className="bonus-item">+{rarityBonus.areaOfEffectBonus}% area of effect</div>
+              )}
+              {rarityBonus.manaCostReduction && (
+                <div className="bonus-item">-{rarityBonus.manaCostReduction}% mana cost</div>
+              )}
+            </div>
+          </div>
+        )}
+
         {selectedSkill.supportGems.length > 0 && (
           <div className="attached-supports">
-            <h4>Attached Support Gems:</h4>
-            {selectedSkill.supportGems.map(support => (
-              <div key={support.id} className="attached-support">
-                <span>{support.icon} {support.name} (Lv.{support.level})</span>
-                <button 
-                  className="detach-btn"
-                  onClick={() => actions.detachSupportGem(selectedSkill.id, support.id)}
-                >
-                  Detach
-                </button>
-              </div>
-            ))}
+            <h4>Attached Support Gems ({selectedSkill.supportGems.length}/6):</h4>
+            <div className="supports-list">
+              {selectedSkill.supportGems.map(support => (
+                <div key={support.id} className="attached-support">
+                  <span className="support-info">
+                    {support.icon} {support.name} (Lv.{support.level})
+                  </span>
+                  <button 
+                    className="detach-btn"
+                    onClick={() => actions.detachSupportGem(selectedSkill.id, support.id)}
+                  >
+                    Detach
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -301,37 +431,100 @@ export const SkillGemPanel = React.memo(function SkillGemPanel({ isOpen, onClose
     if (!selectedSupport) return null
 
     const scaledModifiers = getScaledSupportGemModifiers(selectedSupport)
+    const compatibleSkills = skillData.unlockedSkills.filter(skill => isCompatibleSupport(skill, selectedSupport))
+    const rarityBonus = GEM_RARITY_BONUSES[selectedSupport.rarity]
 
     return (
       <div className="support-details">
-        <h3>{selectedSupport.name}</h3>
-        <p className="support-description">{selectedSupport.description}</p>
-        <div className="support-stats">
-          <p><strong>Level:</strong> {selectedSupport.level}/{selectedSupport.maxLevel}</p>
+        <div className="support-details-header">
+          <h3 style={{ color: getRarityColor(selectedSupport.rarity) }}>
+            {selectedSupport.icon} {selectedSupport.name}
+          </h3>
+          <div className="support-details-meta">
+            <span className="detail-rarity" style={{ color: getRarityColor(selectedSupport.rarity) }}>
+              {selectedSupport.rarity}
+            </span>
+            {selectedSupport.quality > 0 && (
+              <span className="detail-quality">Quality: {selectedSupport.quality}%</span>
+            )}
+          </div>
         </div>
+
+        <p className="support-description">{selectedSupport.description}</p>
+        
+        <div className="support-tags-full">
+          <h4>Tags:</h4>
+          <div className="tags-container">
+            {selectedSupport.tags.map(tag => (
+              <span key={tag} className={`support-tag tag-${tag.toLowerCase()}`}>
+                {tag}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="support-stats">
+          <h4>Statistics:</h4>
+          <div className="stats-grid">
+            <div className="stat-row">
+              <span className="stat-label">Level:</span>
+              <span className="stat-value">{selectedSupport.level}/{selectedSupport.maxLevel}</span>
+            </div>
+          </div>
+        </div>
+
         <div className="support-modifiers">
           <h4>Modifiers:</h4>
-          {scaledModifiers.map((modifier, index) => (
-            <p key={index} className="modifier">
-              {modifier.description}
-            </p>
-          ))}
+          <div className="modifiers-list">
+            {scaledModifiers.map((modifier, index) => (
+              <div key={index} className="modifier-item">
+                {modifier.description}
+              </div>
+            ))}
+          </div>
         </div>
+
+        <div className="compatibility-section">
+          <h4>Compatibility ({compatibleSkills.length} skills):</h4>
+          <div className="compatible-skills">
+            {compatibleSkills.map(skill => (
+              <div key={skill.id} className="compatible-skill">
+                <span className="skill-info">
+                  {skill.icon} {skill.name}
+                </span>
+                <div className="skill-tags-mini">
+                  {skill.tags.filter(tag => selectedSupport.tags.some(supportTag => 
+                    supportTag === tag || 
+                    (supportTag === 'Support' && ['Attack', 'Spell', 'AoE', 'Projectile'].includes(tag))
+                  )).map(tag => (
+                    <span key={tag} className={`tag-mini tag-${tag.toLowerCase()}`}>
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {selectedSupport.isUnlocked && (
           <div className="attach-to-skill">
             <h4>Attach to Skill:</h4>
-            {skillData.unlockedSkills.filter(skill => 
-              skill.supportGems.length < 5 && 
-              !skill.supportGems.some(s => s.id === selectedSupport.id)
-            ).map(skill => (
-              <button
-                key={skill.id}
-                className="attach-btn"
-                onClick={() => actions.attachSupportGem(skill.id, selectedSupport.id)}
-              >
-                {skill.icon} {skill.name}
-              </button>
-            ))}
+            <div className="attachable-skills">
+              {skillData.unlockedSkills.filter(skill => 
+                skill.supportGems.length < 6 && 
+                !skill.supportGems.some(s => s.id === selectedSupport.id) &&
+                isCompatibleSupport(skill, selectedSupport)
+              ).map(skill => (
+                <button
+                  key={skill.id}
+                  className="attach-btn"
+                  onClick={() => actions.attachSupportGem(skill.id, selectedSupport.id)}
+                >
+                  {skill.icon} {skill.name} ({skill.supportGems.length}/6)
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -365,7 +558,53 @@ export const SkillGemPanel = React.memo(function SkillGemPanel({ isOpen, onClose
           </button>
         </div>
 
-        <div className="panel-content">
+        {/* Search and Filter Controls */}
+        <div className="search-filter-controls">
+        <div className="search-bar">
+          <input
+            type="text"
+            placeholder="Search skills and support gems..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="search-input"
+          />
+        </div>
+        
+        {activeTab === 'skills' && (
+          <div className="tag-filters">
+            <span className="filter-label">Filter by tags:</span>
+            <div className="tag-buttons">
+              {allTags.map(tag => (
+                <button
+                  key={tag}
+                  className={`tag-filter-btn ${selectedTags.has(tag) ? 'active' : ''}`}
+                  onClick={() => {
+                    const newTags = new Set(selectedTags);
+                    if (newTags.has(tag)) {
+                      newTags.delete(tag);
+                    } else {
+                      newTags.add(tag);
+                    }
+                    setSelectedTags(newTags);
+                  }}
+                >
+                  {tag}
+                </button>
+              ))}
+              {selectedTags.size > 0 && (
+                <button
+                  className="clear-filters-btn"
+                  onClick={() => setSelectedTags(new Set())}
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="panel-content">
           <div className="gems-grid">
             {activeTab === 'skills' && (
               <>
@@ -420,12 +659,12 @@ export const SkillGemPanel = React.memo(function SkillGemPanel({ isOpen, onClose
         </div>
 
         <div className="details-panel">
-            {activeTab === 'skills' && renderSkillDetails()}
-            {activeTab === 'supports' && renderSupportDetails()}
-          </div>
+          {activeTab === 'skills' && renderSkillDetails()}
+          {activeTab === 'supports' && renderSupportDetails()}
         </div>
       </div>
-    )
+    </div>
+  )
 })
 
 export default SkillGemPanel

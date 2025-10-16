@@ -68,6 +68,7 @@ type GameAction =
   | { type: 'USE_SKILL'; payload: string }
   | { type: 'UPDATE_ENEMY_POSITIONS'; payload: Record<string, { x: number; y: number }> }
   | { type: 'UPDATE_PLAYER_POSITION'; payload: { x: number; y: number } }
+  | { type: 'CHANNEL_WHIRLWIND' }
 
 interface GameActions {
   spawnEnemy: (level?: number, kind?: EnemyType) => void
@@ -257,11 +258,8 @@ function reducer(state: GameState, action: GameAction): GameState {
 
       if (res.enemyDefeated) {
         const lootArray = generateLoot(target.level, target.isBoss)
-        const loot = lootArray[0] // Take the first item from the loot array
         newEnemies = newEnemies.filter(e => e.id !== enemyId)
-        const lootMessage = target.isBoss ? `🎉 BOSS DEFEATED! Epic Loot: ${loot.name}` : `Enemy defeated! Loot: ${loot.name}`
-        newLog.unshift(lootMessage)
-        newPlayer.gold += loot.value
+        
         // Bosses give more XP
         const xpGain = target.isBoss ? Math.floor(target.level * 12) : Math.max(1, Math.floor(target.level * 4))
         newPlayer.xp += xpGain
@@ -270,15 +268,40 @@ function reducer(state: GameState, action: GameAction): GameState {
         const maxInventoryItems = 10 * 4 // 10 pages * 4 items per page (list view)
         let newInventory = [...state.inventory]
         
-        if (newInventory.length >= maxInventoryItems) {
-          // Convert excess items to gold automatically
-          const excessGold = loot.value
-          newPlayer.gold += excessGold
-          newLog.unshift(`💰 Inventory full! ${loot.name} converted to ${excessGold} gold`)
+        // Process all loot items
+        let totalGoldFromLoot = 0
+        let itemsAdded = 0
+        let itemsConverted = 0
+        
+        lootArray.forEach(loot => {
+          totalGoldFromLoot += loot.value
+          
+          if (newInventory.length >= maxInventoryItems) {
+            // Convert excess items to gold automatically
+            newPlayer.gold += loot.value
+            itemsConverted++
+          } else {
+            // Add item to inventory normally
+            newInventory.push(loot)
+            itemsAdded++
+          }
+        })
+        
+        // Create appropriate loot messages
+        if (target.isBoss) {
+          newLog.unshift(`🎉 BOSS DEFEATED! ${lootArray.length} Epic Items Found!`)
         } else {
-          // Add item to inventory normally
-          newInventory = [...newInventory, loot]
+          newLog.unshift(`Enemy defeated! ${lootArray.length} items dropped`)
         }
+        
+        if (itemsAdded > 0) {
+          newLog.unshift(`📦 ${itemsAdded} items added to inventory`)
+        }
+        if (itemsConverted > 0) {
+          newLog.unshift(`💰 Inventory full! ${itemsConverted} items converted to ${itemsConverted * Math.floor(totalGoldFromLoot / lootArray.length)} gold`)
+        }
+        
+        newPlayer.gold += totalGoldFromLoot
 
         // level up loop
         while (newPlayer.xp >= newPlayer.nextLevelXp) {
@@ -650,6 +673,94 @@ function reducer(state: GameState, action: GameAction): GameState {
       return { ...state, playerPosition: action.payload }
     }
     
+    case 'CHANNEL_WHIRLWIND': {
+      // Continuous whirlwind channeling - independent of combat ticks
+      const whirlwindSkill = state.player.skillBar.slots.find((s: any) => s?.id === 'whirlwind')
+      
+      if (!whirlwindSkill || !whirlwindSkill.isUnlocked) {
+        return state
+      }
+      
+      let updatedPlayer = { ...state.player }
+      let skillLog: string[] = []
+      
+      // Initialize skill cooldowns if not present
+      if (!updatedPlayer.skillCooldowns) {
+        updatedPlayer.skillCooldowns = {}
+      }
+      
+      const currentTime = Date.now()
+      const lastUsed = updatedPlayer.skillCooldowns['whirlwind'] || 0
+      const cooldownTime = whirlwindSkill.scaling.baseCooldown || whirlwindSkill.cooldown
+      
+      // With zero cooldown, Whirlwind can activate every channel tick for true continuous channeling
+      if (cooldownTime === 0 || currentTime - lastUsed >= cooldownTime) {
+        // Activate Whirlwind automatically
+        updatedPlayer.skillCooldowns['whirlwind'] = currentTime
+        
+        // Calculate Whirlwind area of effect
+        const whirlwindArea = whirlwindSkill.scaling.baseArea! + (whirlwindSkill.level - 1) * whirlwindSkill.scaling.areaPerLevel!
+        const whirlwindRange = whirlwindArea * 30 // Convert area to pixel range (base area 2.5 = ~75 pixel range)
+        
+        // Apply Whirlwind effects only to enemies within range
+        const damage = Math.floor(whirlwindSkill.scaling.baseDamage! + (whirlwindSkill.level - 1) * whirlwindSkill.scaling.damagePerLevel!)
+        
+        // Player position (use actual position from state, fallback to default if not set)
+        const playerPosition = state.playerPosition || { x: 150, y: 300 }
+        
+        let enemiesHit = 0
+        let updatedEnemies = [...state.enemies]
+        
+        updatedEnemies.forEach(enemy => {
+          if (enemy.hp > 0 && enemy.position) {
+            // Calculate distance between player and enemy
+            const distance = Math.hypot(
+              enemy.position.x - playerPosition.x,
+              enemy.position.y - playerPosition.y
+            )
+            
+            const isInRange = distance <= whirlwindRange
+            
+            if (isInRange) {
+              enemy.hp = Math.max(0, enemy.hp - damage)
+              enemiesHit++
+            }
+          }
+        })
+        
+        // Only emit visual effects and logs if enemies were hit
+        if (enemiesHit > 0) {
+          skillLog.push(`ANIM_SKILL|whirlwind|${currentTime}|1000`) // 1 second visual duration
+          skillLog.push(`🌪️ Whirlwind channels continuously! (${enemiesHit} enemies hit, range: ${Math.round(whirlwindRange)})`)
+        }
+        
+        // Remove defeated enemies and generate loot
+        const defeatedEnemies = updatedEnemies.filter(e => e.hp <= 0)
+        updatedEnemies = updatedEnemies.filter(e => e.hp > 0)
+        
+        defeatedEnemies.forEach(enemy => {
+          const lootArray = generateLoot(enemy.level, enemy.isBoss)
+          lootArray.forEach(loot => {
+            updatedPlayer.gold += loot.value
+          })
+          if (lootArray.length > 0) {
+            skillLog.push(`Enemy defeated by Whirlwind! ${lootArray.length} items dropped`)
+          }
+        })
+        
+        const calculatedPlayer = calculatePlayerStats(updatedPlayer)
+        
+        return {
+          ...state,
+          player: calculatedPlayer,
+          enemies: updatedEnemies,
+          log: [...skillLog, ...state.log].slice(0, 200)
+        }
+      }
+      
+      return state
+    }
+    
     default:
       return state
   }
@@ -699,6 +810,19 @@ export function GameProvider({ children }: GameProviderProps) {
     }, interval)
     return () => clearInterval(tid)
   }, [state.enemies.length, state.skills])
+
+  // Continuous channeling loop for whirlwind - runs independently of combat
+  useEffect(() => {
+    const whirlwindSkill = state.player.skillBar.slots.find((s: any) => s?.id === 'whirlwind')
+    
+    if (whirlwindSkill && whirlwindSkill.isUnlocked) {
+      const channelInterval = 100 // 10 times per second for smooth channeling
+      const tid = setInterval(() => {
+        dispatch({ type: 'CHANNEL_WHIRLWIND' })
+      }, channelInterval)
+      return () => clearInterval(tid)
+    }
+  }, [state.player.skillBar])
 
   const actions: GameActions = useMemo(() => ({
     spawnEnemy: (level?: number, kind?: EnemyType) => dispatch({ type: 'SPAWN', payload: { level, kind } }),

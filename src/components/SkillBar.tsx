@@ -112,7 +112,7 @@ export function SkillBar({ className = '' }: SkillBarProps) {
                       className="support-header"
                       onClick={() => toggleSupportDetails(skill.id)}
                     >
-                      <span>Support Gems ({skill.supportGems.length}/5)</span>
+                      <span>Support Gems ({skill.supportGems.length}/6)</span>
                       <span className={`expand-icon ${showSupportDetails[skill.id] ? 'expanded' : ''}`}>
                         ▼
                       </span>

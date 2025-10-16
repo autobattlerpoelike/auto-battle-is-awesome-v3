@@ -306,12 +306,21 @@ export function attachSupportGem(player: Player, skillId: string, supportId: str
     return { success: false, message: 'Support gem must be unlocked first' }
   }
   
-  if (skill.supportGems.length >= 5) {
-    return { success: false, message: 'Skill already has maximum support gems (5)' }
+  if (skill.supportGems.length >= 6) {
+    return { success: false, message: 'Skill already has maximum support gems (6)' }
   }
   
   if (skill.supportGems.some(s => s.id === supportId)) {
     return { success: false, message: 'Support gem is already attached to this skill' }
+  }
+  
+  // Check tag compatibility - support gem must have at least one matching tag with the skill
+  const hasMatchingTag = support.tags.some(supportTag => skill.tags.includes(supportTag))
+  if (!hasMatchingTag) {
+    return { 
+      success: false, 
+      message: `${support.name} is not compatible with ${skill.name}. Support gem tags (${support.tags.join(', ')}) must match at least one skill tag (${skill.tags.join(', ')}).` 
+    }
   }
   
   // Create updated player

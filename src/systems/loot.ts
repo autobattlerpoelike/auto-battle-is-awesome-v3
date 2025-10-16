@@ -118,7 +118,10 @@ function getElementColor(element: DamageType): string {
 
 // Optimized loot generation with reduced allocations
 export function generateLoot(level: number, fromBoss: boolean = false): any[] {
-  const numItems = fromBoss ? Math.floor(Math.random() * 3) + 2 : 3 // 2-4 items for bosses, 3 for normal enemies
+  // Better drop rates: normal enemies drop 1-2 items, bosses drop 2-4 items
+  const numItems = fromBoss ? 
+    Math.floor(Math.random() * 3) + 2 : // 2-4 items for bosses
+    Math.floor(Math.random() * 2) + 1   // 1-2 items for normal enemies
   
   if (numItems === 1) {
     // Fast path for single item

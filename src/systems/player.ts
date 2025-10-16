@@ -1,5 +1,6 @@
 import { Equipment, EquipmentSlot, Attribute, EquipmentStats } from './equipment'
 import { SkillGem, SupportGem, SkillBar, MAIN_SKILL_GEMS, SUPPORT_GEMS, createDefaultSkillGem, createDefaultSupportGem, createDefaultSkillBar } from './skillGems'
+import { MapDevice, createDefaultMapDevice } from './mapping'
 
 export type Player = {
   level: number
@@ -32,6 +33,9 @@ export type Player = {
   supportGems: SupportGem[]
   skillBar: SkillBar
   skillCooldowns?: Record<string, number> // Track last usage time for each skill
+  
+  // Endgame Mapping System
+  mapDevice: MapDevice
   
   // Base stats
   attackSpeed?: number
@@ -111,6 +115,9 @@ export function defaultPlayer(): Player {
       maxSlots: 6
     },
     
+    // Endgame Mapping System
+    mapDevice: createDefaultMapDevice(),
+    
     // Base stats
     attackSpeed: 1,
     projectileSpeed: 1,
@@ -146,6 +153,21 @@ export function calculatePlayerStats(basePlayer: Player): Player {
   // Initialize calculated stats
   player.calculatedStats = {}
   
+  // Reset to base values to prevent infinite accumulation
+  player.baseDps = 2 // Original base DPS
+  player.maxHp = 120 // Original base HP
+  player.maxMana = 50 // Original base mana
+  player.dps = 2 // Will be calculated from baseDps + equipment
+  player.armor = 0
+  player.critChance = 0
+  player.dodgeChance = 0
+  player.blockChance = 0
+  player.lifeSteal = 0
+  player.attackSpeed = 1
+  player.healthRegen = 0
+  player.manaRegen = 0
+  player.projectileSpeed = 1
+  
   // Apply attribute bonuses to base stats
   const attrs = player.attributes ?? {}
   
@@ -156,22 +178,22 @@ export function calculatePlayerStats(basePlayer: Player): Player {
   
   // Dexterity: +0.5% crit chance per point, +0.3% dodge per point
   const dexBonus = (attrs.dexterity ?? 10) - 10
-  player.critChance = (player.critChance ?? 0) + (dexBonus * 0.005)
-  player.dodgeChance = (player.dodgeChance ?? 0) + (dexBonus * 0.003)
+  player.critChance += (dexBonus * 0.005)
+  player.dodgeChance += (dexBonus * 0.003)
   
   // Intelligence: +1 mana per point, +0.2 mana regen per point
   const intBonus = (attrs.intelligence ?? 10) - 10
   player.maxMana += intBonus
-  player.manaRegen = (player.manaRegen ?? 0) + (intBonus * 0.2)
+  player.manaRegen += (intBonus * 0.2)
   
   // Vitality: +3 HP per point, +0.1 HP regen per point
   const vitBonus = (attrs.vitality ?? 10) - 10
   player.maxHp += vitBonus * 3
-  player.healthRegen = (player.healthRegen ?? 0) + (vitBonus * 0.1)
+  player.healthRegen += (vitBonus * 0.1)
   
   // Luck: +0.5% crit chance per point, affects loot quality
   const luckBonus = (attrs.luck ?? 5) - 5 // Base is 5
-  player.critChance = (player.critChance ?? 0) + (luckBonus * 0.005)
+  player.critChance += (luckBonus * 0.005)
   
   // Apply skill bonuses (legacy system)
   const skills = player.skills ?? {}
@@ -221,16 +243,16 @@ export function calculatePlayerStats(basePlayer: Player): Player {
   
   // Apply equipment stats to player
   player.dps = player.baseDps + (totalEquipmentStats.damage ?? 0)
-  player.armor = (player.armor ?? 0) + (totalEquipmentStats.armor ?? 0)
+  player.armor += (totalEquipmentStats.armor ?? 0)
   player.maxHp += (totalEquipmentStats.health ?? 0)
   player.maxMana += (totalEquipmentStats.mana ?? 0)
-  player.critChance = (player.critChance ?? 0) + (totalEquipmentStats.critChance ?? 0)
-  player.dodgeChance = (player.dodgeChance ?? 0) + (totalEquipmentStats.dodgeChance ?? 0)
-  player.blockChance = (player.blockChance ?? 0) + (totalEquipmentStats.blockChance ?? 0)
-  player.lifeSteal = (player.lifeSteal ?? 0) + (totalEquipmentStats.lifeSteal ?? 0)
-  player.attackSpeed = (player.attackSpeed ?? 1) + (totalEquipmentStats.attackSpeed ?? 0)
-  player.healthRegen = (player.healthRegen ?? 0) + (totalEquipmentStats.healthRegen ?? 0)
-  player.manaRegen = (player.manaRegen ?? 0) + (totalEquipmentStats.manaRegen ?? 0)
+  player.critChance += (totalEquipmentStats.critChance ?? 0)
+  player.dodgeChance += (totalEquipmentStats.dodgeChance ?? 0)
+  player.blockChance += (totalEquipmentStats.blockChance ?? 0)
+  player.lifeSteal += (totalEquipmentStats.lifeSteal ?? 0)
+  player.attackSpeed += (totalEquipmentStats.attackSpeed ?? 0)
+  player.healthRegen += (totalEquipmentStats.healthRegen ?? 0)
+  player.manaRegen += (totalEquipmentStats.manaRegen ?? 0)
   
   // Apply attribute bonuses from equipment
   if (totalEquipmentStats.strength) {
@@ -275,19 +297,19 @@ export function calculatePlayerStats(basePlayer: Player): Player {
             player.dps += extra.val
             break
           case 'critChance':
-            player.critChance = (player.critChance ?? 0) + extra.val
+            player.critChance += extra.val
             break
           case 'dodgeChance':
-            player.dodgeChance = (player.dodgeChance ?? 0) + extra.val
+            player.dodgeChance += extra.val
             break
           case 'lifeSteal':
-            player.lifeSteal = (player.lifeSteal ?? 0) + extra.val
+            player.lifeSteal += extra.val
             break
           case 'armor':
-            player.armor = (player.armor ?? 0) + extra.val
+            player.armor += extra.val
             break
           case 'projectileSpeed':
-            player.projectileSpeed = (player.projectileSpeed ?? 1) + extra.val
+            player.projectileSpeed += extra.val
             break
         }
       }

@@ -12,6 +12,7 @@ import { SkillGemPanel } from './components/SkillGemPanel'
 import { SkillBar } from './components/SkillBar'
 import SkillCombinationsPanel from './components/SkillCombinationsPanel'
 import PerformanceMonitor from './components/PerformanceMonitor'
+import { MapDevice } from './components/MapDevice'
 import './utils/performanceTest' // Import performance testing utilities
 
 export default function App() {
@@ -41,6 +42,8 @@ export default function App() {
         return <InventoryPanel />
       case 'log':
         return <CombatLogPanel />
+      case 'maps':
+        return <MapDevice isOpen={true} onClose={closeModal} />
       default:
         return null
     }
@@ -62,6 +65,8 @@ export default function App() {
         return 'Inventory'
       case 'log':
         return 'Combat Log'
+      case 'maps':
+        return 'Map Device'
       default:
         return ''
     }

@@ -221,21 +221,53 @@ export const WEAPON_AFFIXES: Affix[] = [
   { name: 'of Power', stat: 'damage', value: 3, tier: 1, weight: 100 },
   { name: 'of Might', stat: 'damage', value: 6, tier: 2, weight: 80 },
   { name: 'of Devastation', stat: 'damage', value: 10, tier: 3, weight: 40 },
+  { name: 'of Destruction', stat: 'damage', value: 15, tier: 4, weight: 20 },
+  { name: 'of Annihilation', stat: 'damage', value: 22, tier: 5, weight: 10 },
   
   // Critical affixes
   { name: 'of Precision', stat: 'critChance', value: 0.03, tier: 1, weight: 80 },
   { name: 'of Lethality', stat: 'critChance', value: 0.06, tier: 2, weight: 60 },
   { name: 'of Execution', stat: 'critChance', value: 0.1, tier: 3, weight: 30 },
+  { name: 'of the Assassin', stat: 'critChance', value: 0.15, tier: 4, weight: 15 },
+  { name: 'of Perfect Strike', stat: 'critChance', value: 0.22, tier: 5, weight: 8 },
+  
+  // Critical multiplier affixes
+  { name: 'of Sharpness', stat: 'critMultiplier', value: 0.2, tier: 1, weight: 70 },
+  { name: 'of Brutality', stat: 'critMultiplier', value: 0.4, tier: 2, weight: 50 },
+  { name: 'of Savagery', stat: 'critMultiplier', value: 0.7, tier: 3, weight: 25 },
+  { name: 'of Massacre', stat: 'critMultiplier', value: 1.0, tier: 4, weight: 12 },
   
   // Speed affixes
   { name: 'of Swiftness', stat: 'attackSpeed', value: 0.1, tier: 1, weight: 70 },
   { name: 'of Haste', stat: 'attackSpeed', value: 0.2, tier: 2, weight: 50 },
   { name: 'of Lightning', stat: 'attackSpeed', value: 0.35, tier: 3, weight: 25 },
+  { name: 'of the Storm', stat: 'attackSpeed', value: 0.5, tier: 4, weight: 12 },
+  { name: 'of Time Warp', stat: 'attackSpeed', value: 0.75, tier: 5, weight: 6 },
   
   // Life steal
   { name: 'of Vampirism', stat: 'lifeSteal', value: 0.03, tier: 1, weight: 60 },
   { name: 'of Blood', stat: 'lifeSteal', value: 0.06, tier: 2, weight: 40 },
-  { name: 'of the Vampire', stat: 'lifeSteal', value: 0.1, tier: 3, weight: 20 }
+  { name: 'of the Vampire', stat: 'lifeSteal', value: 0.1, tier: 3, weight: 20 },
+  { name: 'of Soul Drain', stat: 'lifeSteal', value: 0.15, tier: 4, weight: 10 },
+  
+  // Mana steal
+  { name: 'of Mana Burn', stat: 'manaSteal', value: 0.05, tier: 1, weight: 50 },
+  { name: 'of Energy Drain', stat: 'manaSteal', value: 0.1, tier: 2, weight: 30 },
+  { name: 'of the Void', stat: 'manaSteal', value: 0.18, tier: 3, weight: 15 },
+  
+  // Attribute bonuses for weapons
+  { name: 'of the Warrior', stat: 'strength', value: 5, tier: 1, weight: 60 },
+  { name: 'of the Berserker', stat: 'strength', value: 10, tier: 2, weight: 40 },
+  { name: 'of the Champion', stat: 'strength', value: 18, tier: 3, weight: 20 },
+  
+  { name: 'of the Hunter', stat: 'dexterity', value: 5, tier: 1, weight: 60 },
+  { name: 'of the Ranger', stat: 'dexterity', value: 10, tier: 2, weight: 40 },
+  { name: 'of the Marksman', stat: 'dexterity', value: 18, tier: 3, weight: 20 },
+  
+  // Thorns damage
+  { name: 'of Thorns', stat: 'thorns', value: 3, tier: 1, weight: 40 },
+  { name: 'of Spikes', stat: 'thorns', value: 7, tier: 2, weight: 25 },
+  { name: 'of Retaliation', stat: 'thorns', value: 12, tier: 3, weight: 12 }
 ]
 
 export const ARMOR_AFFIXES: Affix[] = [
@@ -243,44 +275,135 @@ export const ARMOR_AFFIXES: Affix[] = [
   { name: 'of Protection', stat: 'armor', value: 2, tier: 1, weight: 100 },
   { name: 'of Defense', stat: 'armor', value: 4, tier: 2, weight: 80 },
   { name: 'of the Fortress', stat: 'armor', value: 7, tier: 3, weight: 40 },
+  { name: 'of the Bastion', stat: 'armor', value: 12, tier: 4, weight: 20 },
+  { name: 'of Invincibility', stat: 'armor', value: 18, tier: 5, weight: 10 },
   
   // Health affixes
   { name: 'of Vitality', stat: 'health', value: 15, tier: 1, weight: 90 },
   { name: 'of Life', stat: 'health', value: 30, tier: 2, weight: 70 },
   { name: 'of the Titan', stat: 'health', value: 50, tier: 3, weight: 35 },
+  { name: 'of the Colossus', stat: 'health', value: 80, tier: 4, weight: 18 },
+  { name: 'of Immortality', stat: 'health', value: 120, tier: 5, weight: 8 },
   
   // Dodge affixes
   { name: 'of Evasion', stat: 'dodgeChance', value: 0.02, tier: 1, weight: 70 },
   { name: 'of Agility', stat: 'dodgeChance', value: 0.04, tier: 2, weight: 50 },
   { name: 'of the Wind', stat: 'dodgeChance', value: 0.07, tier: 3, weight: 25 },
+  { name: 'of the Phantom', stat: 'dodgeChance', value: 0.12, tier: 4, weight: 12 },
+  { name: 'of Ethereal Form', stat: 'dodgeChance', value: 0.18, tier: 5, weight: 6 },
+  
+  // Block chance affixes
+  { name: 'of Blocking', stat: 'blockChance', value: 0.05, tier: 1, weight: 60 },
+  { name: 'of the Shield', stat: 'blockChance', value: 0.1, tier: 2, weight: 40 },
+  { name: 'of the Guardian', stat: 'blockChance', value: 0.16, tier: 3, weight: 20 },
+  { name: 'of Perfect Defense', stat: 'blockChance', value: 0.25, tier: 4, weight: 10 },
   
   // Regeneration
   { name: 'of Regeneration', stat: 'healthRegen', value: 1, tier: 1, weight: 60 },
   { name: 'of Recovery', stat: 'healthRegen', value: 2, tier: 2, weight: 40 },
-  { name: 'of Renewal', stat: 'healthRegen', value: 4, tier: 3, weight: 20 }
+  { name: 'of Renewal', stat: 'healthRegen', value: 4, tier: 3, weight: 20 },
+  { name: 'of Restoration', stat: 'healthRegen', value: 7, tier: 4, weight: 10 },
+  { name: 'of Eternal Life', stat: 'healthRegen', value: 12, tier: 5, weight: 5 },
+  
+  // Mana affixes
+  { name: 'of Mana', stat: 'mana', value: 20, tier: 1, weight: 70 },
+  { name: 'of the Mind', stat: 'mana', value: 40, tier: 2, weight: 50 },
+  { name: 'of Arcane Power', stat: 'mana', value: 70, tier: 3, weight: 25 },
+  { name: 'of the Archmage', stat: 'mana', value: 110, tier: 4, weight: 12 },
+  
+  // Mana regeneration
+  { name: 'of Meditation', stat: 'manaRegen', value: 1, tier: 1, weight: 50 },
+  { name: 'of Focus', stat: 'manaRegen', value: 2, tier: 2, weight: 30 },
+  { name: 'of Enlightenment', stat: 'manaRegen', value: 4, tier: 3, weight: 15 },
+  
+  // Attribute bonuses for armor
+  { name: 'of the Bear', stat: 'vitality', value: 5, tier: 1, weight: 70 },
+  { name: 'of the Ox', stat: 'vitality', value: 10, tier: 2, weight: 50 },
+  { name: 'of the Mountain', stat: 'vitality', value: 18, tier: 3, weight: 25 },
+  
+  { name: 'of the Sage', stat: 'intelligence', value: 5, tier: 1, weight: 60 },
+  { name: 'of the Scholar', stat: 'intelligence', value: 10, tier: 2, weight: 40 },
+  { name: 'of the Wizard', stat: 'intelligence', value: 18, tier: 3, weight: 20 },
+  
+  // Thorns for armor
+  { name: 'of Spines', stat: 'thorns', value: 2, tier: 1, weight: 50 },
+  { name: 'of Barbs', stat: 'thorns', value: 5, tier: 2, weight: 30 },
+  { name: 'of the Hedgehog', stat: 'thorns', value: 9, tier: 3, weight: 15 }
 ]
 
 export const ACCESSORY_AFFIXES: Affix[] = [
-  // Attribute bonuses
+  // Attribute bonuses - multiple tiers
   { name: 'of Strength', stat: 'strength', value: 3, tier: 1, weight: 80 },
+  { name: 'of Great Strength', stat: 'strength', value: 6, tier: 2, weight: 60 },
+  { name: 'of Mighty Strength', stat: 'strength', value: 10, tier: 3, weight: 30 },
+  { name: 'of Legendary Strength', stat: 'strength', value: 16, tier: 4, weight: 15 },
+  { name: 'of Divine Strength', stat: 'strength', value: 25, tier: 5, weight: 8 },
+  
   { name: 'of Dexterity', stat: 'dexterity', value: 3, tier: 1, weight: 80 },
+  { name: 'of Great Dexterity', stat: 'dexterity', value: 6, tier: 2, weight: 60 },
+  { name: 'of Swift Dexterity', stat: 'dexterity', value: 10, tier: 3, weight: 30 },
+  { name: 'of Perfect Dexterity', stat: 'dexterity', value: 16, tier: 4, weight: 15 },
+  { name: 'of Divine Grace', stat: 'dexterity', value: 25, tier: 5, weight: 8 },
+  
   { name: 'of Intelligence', stat: 'intelligence', value: 3, tier: 1, weight: 80 },
+  { name: 'of Great Intelligence', stat: 'intelligence', value: 6, tier: 2, weight: 60 },
+  { name: 'of Brilliant Intelligence', stat: 'intelligence', value: 10, tier: 3, weight: 30 },
+  { name: 'of Genius Intelligence', stat: 'intelligence', value: 16, tier: 4, weight: 15 },
+  { name: 'of Omniscience', stat: 'intelligence', value: 25, tier: 5, weight: 8 },
+  
   { name: 'of Vitality', stat: 'vitality', value: 3, tier: 1, weight: 80 },
+  { name: 'of Great Vitality', stat: 'vitality', value: 6, tier: 2, weight: 60 },
+  { name: 'of Robust Vitality', stat: 'vitality', value: 10, tier: 3, weight: 30 },
+  { name: 'of Supreme Vitality', stat: 'vitality', value: 16, tier: 4, weight: 15 },
+  { name: 'of Eternal Vitality', stat: 'vitality', value: 25, tier: 5, weight: 8 },
+  
   { name: 'of Luck', stat: 'luck', value: 3, tier: 1, weight: 60 },
+  { name: 'of Good Luck', stat: 'luck', value: 6, tier: 2, weight: 40 },
+  { name: 'of Great Luck', stat: 'luck', value: 10, tier: 3, weight: 20 },
+  { name: 'of Incredible Luck', stat: 'luck', value: 16, tier: 4, weight: 10 },
+  { name: 'of Divine Fortune', stat: 'luck', value: 25, tier: 5, weight: 5 },
   
   // Magic find and gold find
   { name: 'of Fortune', stat: 'goldFind', value: 0.15, tier: 1, weight: 70 },
   { name: 'of Wealth', stat: 'goldFind', value: 0.25, tier: 2, weight: 50 },
   { name: 'of Greed', stat: 'goldFind', value: 0.4, tier: 3, weight: 25 },
+  { name: 'of Avarice', stat: 'goldFind', value: 0.6, tier: 4, weight: 12 },
+  { name: 'of Midas', stat: 'goldFind', value: 0.85, tier: 5, weight: 6 },
   
   { name: 'of Discovery', stat: 'magicFind', value: 0.1, tier: 1, weight: 60 },
   { name: 'of Finding', stat: 'magicFind', value: 0.2, tier: 2, weight: 40 },
   { name: 'of the Seeker', stat: 'magicFind', value: 0.35, tier: 3, weight: 20 },
+  { name: 'of the Treasure Hunter', stat: 'magicFind', value: 0.55, tier: 4, weight: 10 },
+  { name: 'of the Artifact Finder', stat: 'magicFind', value: 0.8, tier: 5, weight: 5 },
   
   // Experience bonus
   { name: 'of Learning', stat: 'experienceBonus', value: 0.1, tier: 1, weight: 50 },
   { name: 'of Wisdom', stat: 'experienceBonus', value: 0.2, tier: 2, weight: 30 },
-  { name: 'of the Scholar', stat: 'experienceBonus', value: 0.35, tier: 3, weight: 15 }
+  { name: 'of the Scholar', stat: 'experienceBonus', value: 0.35, tier: 3, weight: 15 },
+  { name: 'of the Master', stat: 'experienceBonus', value: 0.55, tier: 4, weight: 8 },
+  { name: 'of Enlightenment', stat: 'experienceBonus', value: 0.8, tier: 5, weight: 4 },
+  
+  // Combat stats for accessories
+  { name: 'of Accuracy', stat: 'critChance', value: 0.02, tier: 1, weight: 60 },
+  { name: 'of Keen Eye', stat: 'critChance', value: 0.04, tier: 2, weight: 40 },
+  { name: 'of Eagle Eye', stat: 'critChance', value: 0.07, tier: 3, weight: 20 },
+  
+  { name: 'of Nimbleness', stat: 'dodgeChance', value: 0.02, tier: 1, weight: 50 },
+  { name: 'of Quickness', stat: 'dodgeChance', value: 0.04, tier: 2, weight: 30 },
+  { name: 'of the Cat', stat: 'dodgeChance', value: 0.07, tier: 3, weight: 15 },
+  
+  { name: 'of Alacrity', stat: 'attackSpeed', value: 0.08, tier: 1, weight: 40 },
+  { name: 'of Velocity', stat: 'attackSpeed', value: 0.15, tier: 2, weight: 25 },
+  { name: 'of the Cheetah', stat: 'attackSpeed', value: 0.25, tier: 3, weight: 12 },
+  
+  // Health and mana for accessories
+  { name: 'of Health', stat: 'health', value: 25, tier: 1, weight: 70 },
+  { name: 'of Greater Health', stat: 'health', value: 50, tier: 2, weight: 50 },
+  { name: 'of Superior Health', stat: 'health', value: 85, tier: 3, weight: 25 },
+  
+  { name: 'of Energy', stat: 'mana', value: 30, tier: 1, weight: 60 },
+  { name: 'of Greater Energy', stat: 'mana', value: 60, tier: 2, weight: 40 },
+  { name: 'of Superior Energy', stat: 'mana', value: 100, tier: 3, weight: 20 }
 ]
 
 // Rarity definitions
