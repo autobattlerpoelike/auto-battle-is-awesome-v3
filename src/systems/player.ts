@@ -189,39 +189,34 @@ export function calculatePlayerStats(basePlayer: Player): Player {
     player.armor = (player.armor ?? 0) + skills.resilience
   }
   
-  // Apply equipment bonuses from new system
+  // Apply equipment bonuses from new system with optimized calculation
   let totalEquipmentStats: EquipmentStats = {}
   
   // Ensure equipment exists before processing
   if (player.equipment) {
+    // Pre-allocate stats object for better performance
+    const statsAccumulator: Record<string, number> = {}
+    
     Object.values(player.equipment).forEach(equipment => {
-    if (equipment) {
-      // Apply base stats
-      Object.entries(equipment.baseStats).forEach(([stat, value]) => {
-        if (typeof value === 'number') {
-          const statKey = stat as keyof EquipmentStats
-          // Only perform arithmetic on number properties, skip complex types like resistance
-          if (statKey !== 'resistance') {
-            const currentValue = totalEquipmentStats[statKey]
-            if (typeof currentValue === 'number' || currentValue === undefined) {
-              totalEquipmentStats[statKey] = (currentValue ?? 0) + value
-            }
+      if (equipment) {
+        // Apply base stats efficiently
+        for (const [stat, value] of Object.entries(equipment.baseStats)) {
+          if (typeof value === 'number' && stat !== 'resistance') {
+            statsAccumulator[stat] = (statsAccumulator[stat] ?? 0) + value
           }
         }
-      })
-      
-      // Apply affix stats
-      equipment.affixes.forEach(affix => {
-        // Only perform arithmetic on number properties, skip complex types like resistance
-        if (affix.stat !== 'resistance') {
-          const currentValue = totalEquipmentStats[affix.stat]
-          if (typeof currentValue === 'number' || currentValue === undefined) {
-            totalEquipmentStats[affix.stat] = (currentValue ?? 0) + affix.value
+        
+        // Apply affix stats efficiently
+        for (const affix of equipment.affixes) {
+          if (affix.stat !== 'resistance') {
+            statsAccumulator[affix.stat] = (statsAccumulator[affix.stat] ?? 0) + affix.value
           }
         }
-      })
-    }
-  })
+      }
+    })
+    
+    // Convert accumulator to typed stats object
+    totalEquipmentStats = statsAccumulator as EquipmentStats
   }
   
   // Apply equipment stats to player

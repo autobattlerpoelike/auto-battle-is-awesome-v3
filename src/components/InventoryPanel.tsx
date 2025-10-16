@@ -1,39 +1,136 @@
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback, memo } from 'react'
 import { useGame } from '../systems/gameContext'
+
+// Helper functions for styling - memoized for performance
+const rarityColorMap = {
+  'Common': '#9ca3af',
+  'Magic': '#06b6d4',
+  'Rare': '#8b5cf6',
+  'Unique': '#fbbf24',
+  'Legendary': '#ff6b6b'
+} as const
+
+const elementColorMap = {
+  'fire': '#ff6b6b',
+  'ice': '#74c0fc',
+  'lightning': '#ffd43b',
+  'poison': '#51cf66'
+} as const
+
+const elementSymbolMap = {
+  'fire': '🔥',
+  'ice': '❄️',
+  'lightning': '⚡',
+  'poison': '☠️'
+} as const
 
 function rarityColor(r: string | undefined): string {
   if (!r) return '#9ca3af'
-  if (r === 'Common') return '#9ca3af'
-  if (r === 'Magic') return '#06b6d4'
-  if (r === 'Rare') return '#8b5cf6'
-  if (r === 'Unique') return '#fbbf24'
-  if (r === 'Legendary') return '#ff6b6b'
-  return '#9ca3af'
+  return rarityColorMap[r as keyof typeof rarityColorMap] || '#9ca3af'
 }
 
 function elementColor(element: string | undefined): string {
   if (!element || element === 'physical') return ''
-  const colors: Record<string, string> = {
-    fire: '#ff6b6b',
-    ice: '#74c0fc',
-    lightning: '#ffd43b',
-    poison: '#51cf66'
-  }
-  return colors[element] || ''
+  return elementColorMap[element as keyof typeof elementColorMap] || ''
 }
 
 function formatElement(element: string | undefined): string {
   if (!element || element === 'physical') return ''
-  const symbols: Record<string, string> = {
-    fire: '🔥',
-    ice: '❄️',
-    lightning: '⚡',
-    poison: '☠️'
-  }
-  return symbols[element] || ''
+  return elementSymbolMap[element as keyof typeof elementSymbolMap] || ''
 }
 
-const InventoryPanel = React.memo(function InventoryPanel() {
+// Memoized item component for better performance
+const InventoryItem = memo(({ 
+  item, 
+  viewMode,
+  onEquip, 
+  onSell 
+}: { 
+  item: any
+  viewMode: string
+  onEquip: (id: string) => void
+  onSell: (id: string) => void 
+}) => {
+  const handleEquip = useCallback(() => onEquip(item.id), [onEquip, item.id])
+  const handleSell = useCallback(() => onSell(item.id), [onSell, item.id])
+  
+  return (
+    <div className={`bg-gray-700 rounded border border-gray-600 ${
+      viewMode === 'grid' ? 'p-2' : 'p-3'
+    }`}>
+      <div className={`${viewMode === 'grid' ? 'flex flex-col' : 'flex justify-between items-start'}`}>
+        <div className="flex-1">
+          <div className={`font-bold ${viewMode === 'grid' ? 'text-xs' : 'text-sm'}`} style={{color: rarityColor(item.rarity)}}>
+            {viewMode === 'grid' ? (item.name || 'Unnamed Item').split(' ').slice(0, 2).join(' ') : (item.name || 'Unnamed Item')} {formatElement(item.damageType)}
+          </div>
+          <div className={`text-gray-300 ${viewMode === 'grid' ? 'text-xs' : 'text-sm'}`}>
+            {/* Show new equipment stats */}
+            {item.baseStats ? (
+              <>
+                {item.baseStats.damage && `Damage: ${Math.floor(item.baseStats.damage)}`}
+                {item.baseStats.armor && `Armor: ${Math.floor(item.baseStats.armor)}`}
+                {item.baseStats.health && ` • HP: +${Math.floor(item.baseStats.health)}`}
+                {item.category && ` • ${item.category}`}
+                {item.slot && ` • ${item.slot}`}
+              </>
+            ) : (
+              /* Legacy equipment stats */
+              <>
+                Power: +{item.power} • {item.type}
+              </>
+            )}
+            {item.damageType && item.damageType !== 'physical' && (
+              <span style={{color: elementColor(item.damageType)}}> • {item.damageType}</span>
+            )}
+          </div>
+          
+          {/* Show affixes for new equipment or extras for legacy */}
+          {item.affixes && item.affixes.length > 0 && viewMode === 'list' && (
+            <div className="text-xs text-blue-300 mt-1">
+              {item.affixes.map((a: any) => `${a.name}: +${a.value}`).join(', ')}
+            </div>
+          )}
+          {item.extras && item.extras.length > 0 && viewMode === 'list' && (
+            <div className="text-xs text-blue-300 mt-1">
+              {item.extras.map((e: any) => `${e.key}: +${e.val}`).join(', ')}
+            </div>
+          )}
+          
+          {/* Show requirements if any */}
+          {item.requirements && viewMode === 'list' && (
+            <div className="text-xs text-orange-300 mt-1">
+              Requires: {Object.entries(item.requirements).map(([attr, val]) => `${attr}: ${val}`).join(', ')}
+            </div>
+          )}
+          
+          <div className={`text-yellow-400 mt-1 ${viewMode === 'grid' ? 'text-xs' : 'text-xs'}`}>
+            Value: {item.value} gold
+          </div>
+        </div>
+        <div className={`flex gap-1 ${viewMode === 'grid' ? 'mt-2' : 'ml-3'}`}>
+          <button 
+            className={`bg-blue-600 hover:bg-blue-700 rounded text-xs transition-all ${
+              viewMode === 'grid' ? 'px-1 py-0.5 flex-1' : 'px-2 py-1'
+            }`}
+            onClick={handleEquip}
+          >
+            {viewMode === 'grid' ? '⚡' : 'Equip'}
+          </button>
+          <button 
+            className={`bg-red-600 hover:bg-red-700 rounded text-xs transition-all ${
+              viewMode === 'grid' ? 'px-1 py-0.5 flex-1' : 'px-2 py-1'
+            }`}
+            onClick={handleSell}
+          >
+            {viewMode === 'grid' ? '🗑️' : 'Discard'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+})
+
+const InventoryPanel = memo(function InventoryPanel() {
   const { state, dispatch, actions } = useGame()
   const [currentPage, setCurrentPage] = useState(0)
   const [viewMode, setViewMode] = useState('list') // 'list' or 'grid'
@@ -88,12 +185,12 @@ const InventoryPanel = React.memo(function InventoryPanel() {
     setCurrentPage(0) // Reset to first page when changing view mode
   }, [])
   
-  const handleEquip = useCallback((item: any) => {
-    dispatch({ type: 'EQUIP', payload: item.id })
+  const handleEquip = useCallback((itemId: string) => {
+    dispatch({ type: 'EQUIP', payload: itemId })
   }, [dispatch])
   
-  const handleSell = useCallback((item: any) => {
-    dispatch({ type: 'DISCARD', payload: item.id })
+  const handleSell = useCallback((itemId: string) => {
+    dispatch({ type: 'DISCARD', payload: itemId })
   }, [dispatch])
 
   return (
@@ -152,79 +249,14 @@ const InventoryPanel = React.memo(function InventoryPanel() {
         </div>
         <div className={`flex-1 ${viewMode === 'grid' ? 'grid grid-cols-2 gap-2' : 'space-y-2'}`}>
           {paginationData.displayInventory.length === 0 && <div className="text-gray-400 text-sm col-span-2">No items yet.</div>}
-          {paginationData.currentItems.map((it) => (
-            <div key={it.id} className={`bg-gray-700 rounded border border-gray-600 ${
-              viewMode === 'grid' ? 'p-2' : 'p-3'
-            }`}>
-              <div className={`${viewMode === 'grid' ? 'flex flex-col' : 'flex justify-between items-start'}`}>
-                <div className="flex-1">
-                  <div className={`font-bold ${viewMode === 'grid' ? 'text-xs' : 'text-sm'}`} style={{color: rarityColor(it.rarity)}}>
-                    {viewMode === 'grid' ? (it.name || 'Unnamed Item').split(' ').slice(0, 2).join(' ') : (it.name || 'Unnamed Item')} {formatElement(it.damageType)}
-                  </div>
-                  <div className={`text-gray-300 ${viewMode === 'grid' ? 'text-xs' : 'text-sm'}`}>
-                    {/* Show new equipment stats */}
-                    {it.baseStats ? (
-                      <>
-                        {it.baseStats.damage && `Damage: ${Math.floor(it.baseStats.damage)}`}
-                        {it.baseStats.armor && `Armor: ${Math.floor(it.baseStats.armor)}`}
-                        {it.baseStats.health && ` • HP: +${Math.floor(it.baseStats.health)}`}
-                        {it.category && ` • ${it.category}`}
-                        {it.slot && ` • ${it.slot}`}
-                      </>
-                    ) : (
-                      /* Legacy equipment stats */
-                      <>
-                        Power: +{it.power} • {it.type}
-                      </>
-                    )}
-                    {it.damageType && it.damageType !== 'physical' && (
-                      <span style={{color: elementColor(it.damageType)}}> • {it.damageType}</span>
-                    )}
-                  </div>
-                  
-                  {/* Show affixes for new equipment or extras for legacy */}
-                  {it.affixes && it.affixes.length > 0 && viewMode === 'list' && (
-                    <div className="text-xs text-blue-300 mt-1">
-                      {it.affixes.map((a: any) => `${a.name}: +${a.value}`).join(', ')}
-                    </div>
-                  )}
-                  {it.extras && it.extras.length > 0 && viewMode === 'list' && (
-                    <div className="text-xs text-blue-300 mt-1">
-                      {it.extras.map((e: any) => `${e.key}: +${e.val}`).join(', ')}
-                    </div>
-                  )}
-                  
-                  {/* Show requirements if any */}
-                  {it.requirements && viewMode === 'list' && (
-                    <div className="text-xs text-orange-300 mt-1">
-                      Requires: {Object.entries(it.requirements).map(([attr, val]) => `${attr}: ${val}`).join(', ')}
-                    </div>
-                  )}
-                  
-                  <div className={`text-yellow-400 mt-1 ${viewMode === 'grid' ? 'text-xs' : 'text-xs'}`}>
-                    Value: {it.value} gold
-                  </div>
-                </div>
-                <div className={`flex gap-1 ${viewMode === 'grid' ? 'mt-2' : 'ml-3'}`}>
-                  <button 
-                    className={`bg-blue-600 hover:bg-blue-700 rounded text-xs transition-all ${
-                      viewMode === 'grid' ? 'px-1 py-0.5 flex-1' : 'px-2 py-1'
-                    }`}
-                    onClick={() => handleEquip(it.id)}
-                  >
-                    {viewMode === 'grid' ? '⚡' : 'Equip'}
-                  </button>
-                  <button 
-                    className={`bg-red-600 hover:bg-red-700 rounded text-xs transition-all ${
-                      viewMode === 'grid' ? 'px-1 py-0.5 flex-1' : 'px-2 py-1'
-                    }`}
-                    onClick={() => handleSell(it.id)}
-                  >
-                    {viewMode === 'grid' ? '🗑️' : 'Discard'}
-                  </button>
-                </div>
-              </div>
-            </div>
+          {paginationData.currentItems.map((item) => (
+            <InventoryItem
+              key={item.id}
+              item={item}
+              viewMode={viewMode}
+              onEquip={handleEquip}
+              onSell={handleSell}
+            />
           ))}
         </div>
         

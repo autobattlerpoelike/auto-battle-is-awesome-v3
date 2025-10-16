@@ -11,6 +11,8 @@ import Modal from './components/Modal'
 import { SkillGemPanel } from './components/SkillGemPanel'
 import { SkillBar } from './components/SkillBar'
 import SkillCombinationsPanel from './components/SkillCombinationsPanel'
+import PerformanceMonitor from './components/PerformanceMonitor'
+import './utils/performanceTest' // Import performance testing utilities
 
 export default function App() {
   const [activeModal, setActiveModal] = useState<string | null>(null)
@@ -106,6 +108,8 @@ export default function App() {
       >
         {renderModalContent()}
       </Modal>
+      
+      <PerformanceMonitor />
     </div>
   )
 }

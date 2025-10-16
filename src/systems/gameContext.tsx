@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useReducer, ReactNode } from 'react'
+import React, { createContext, useContext, useEffect, useReducer, ReactNode, useMemo, useCallback } from 'react'
 import { Player, defaultPlayer, calculatePlayerStats } from './player'
 import { Enemy, EnemyType, spawnEnemyForLevel } from './enemy'
 import { simulateCombatTick } from './combat'
@@ -41,6 +41,7 @@ interface GameState {
   playerPosition?: { x: number; y: number }
   activeCombinations?: SkillCombination[]
   activeSynergies?: SkillSynergy[]
+  lastStatsUpdate: number // Track when stats were last calculated
 }
 
 type GameAction = 
@@ -114,7 +115,8 @@ const initialState: GameState = {
   log: [],
   skills: {},
   activeCombinations: [],
-  activeSynergies: []
+  activeSynergies: [],
+  lastStatsUpdate: Date.now()
 }
 
 // Helper function to update skill combinations and synergies
@@ -128,6 +130,12 @@ function updateSkillCombinations(state: GameState): GameState {
     activeCombinations,
     activeSynergies
   }
+}
+
+// Helper function to check if stats need recalculation
+function needsStatsUpdate(state: GameState, action: GameAction): boolean {
+  const statsUpdateActions = ['LOAD', 'EQUIP', 'UNEQUIP', 'SELL_ALL', 'UPGRADE_SKILL', 'UNLOCK_SKILL_GEM', 'UNLOCK_SUPPORT_GEM', 'LEVEL_UP_SKILL_GEM', 'LEVEL_UP_SUPPORT_GEM', 'EQUIP_SKILL_TO_BAR', 'UNEQUIP_SKILL_FROM_BAR', 'ATTACH_SUPPORT_GEM', 'DETACH_SUPPORT_GEM']
+  return statsUpdateActions.includes(action.type)
 }
 
 function reducer(state: GameState, action: GameAction): GameState {
@@ -157,7 +165,7 @@ function reducer(state: GameState, action: GameAction): GameState {
         // Recalculate player stats to ensure consistency
         payload.player = calculatePlayerStats(payload.player)
       }
-      return { ...state, ...payload }
+      return { ...state, ...payload, lastStatsUpdate: Date.now() }
     }
     case 'SPAWN': {
       const level = action.payload?.level ?? Math.max(1, state.player.level + (Math.random() > 0.5 ? 1 : 0))
@@ -320,13 +328,13 @@ function reducer(state: GameState, action: GameAction): GameState {
         const player = { ...state.player, equipment: newEquipment }
         const calculatedPlayer = calculatePlayerStats(player)
         saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
-        return { ...state, player: calculatedPlayer }
+        return { ...state, player: calculatedPlayer, lastStatsUpdate: Date.now() }
       } else {
         // Legacy equipment system fallback
         const player = { ...state.player, equipped: item }
         const calculatedPlayer = calculatePlayerStats(player)
         saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
-        return { ...state, player: calculatedPlayer }
+        return { ...state, player: calculatedPlayer, lastStatsUpdate: Date.now() }
       }
     }
     case 'UNEQUIP': {
@@ -340,7 +348,7 @@ function reducer(state: GameState, action: GameAction): GameState {
       const player = { ...state.player, equipment: newEquipment }
       const calculatedPlayer = calculatePlayerStats(player)
       saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
-      return { ...state, player: calculatedPlayer }
+      return { ...state, player: calculatedPlayer, lastStatsUpdate: Date.now() }
     }
     case 'DISCARD': {
       const id = action.payload
@@ -361,7 +369,8 @@ function reducer(state: GameState, action: GameAction): GameState {
         ...state, 
         player: calculatedPlayer, 
         inventory: [], 
-        log: [`Sold all items for ${totalValue} gold`, ...state.log].slice(0, 200) 
+        log: [`Sold all items for ${totalValue} gold`, ...state.log].slice(0, 200),
+        lastStatsUpdate: Date.now()
       }
     }
     case 'UPGRADE_SKILL': {
@@ -388,7 +397,16 @@ function reducer(state: GameState, action: GameAction): GameState {
     }
     case 'RESET': {
       saveState({ player: defaultPlayer(), inventory: [], enemies: [spawnEnemyForLevel(1)], skills: {} })
-      return { player: defaultPlayer(), enemies: [spawnEnemyForLevel(1)], inventory: [], log: [], skills: {} }
+      return { 
+        player: defaultPlayer(), 
+        enemies: [spawnEnemyForLevel(1)], 
+        inventory: [], 
+        log: [], 
+        skills: {},
+        activeCombinations: [],
+        activeSynergies: [],
+        lastStatsUpdate: Date.now()
+      }
     }
     case 'LOG': {
       return { ...state, log: [action.payload, ...state.log].slice(0,200) }
@@ -653,13 +671,13 @@ export function GameProvider({ children }: GameProviderProps) {
     }
   }, [])
 
-  const updateEnemyPositions = (positions: Record<string, { x: number; y: number }>) => {
+  const updateEnemyPositions = useCallback((positions: Record<string, { x: number; y: number }>) => {
     dispatch({ type: 'UPDATE_ENEMY_POSITIONS', payload: positions })
-  }
+  }, [])
 
-  const updatePlayerPosition = (position: { x: number; y: number }) => {
+  const updatePlayerPosition = useCallback((position: { x: number; y: number }) => {
     dispatch({ type: 'UPDATE_PLAYER_POSITION', payload: position })
-  }
+  }, [])
 
   // auto-spawn loop
   useEffect(() => {
@@ -682,7 +700,7 @@ export function GameProvider({ children }: GameProviderProps) {
     return () => clearInterval(tid)
   }, [state.enemies.length, state.skills])
 
-  const actions: GameActions = {
+  const actions: GameActions = useMemo(() => ({
     spawnEnemy: (level?: number, kind?: EnemyType) => dispatch({ type: 'SPAWN', payload: { level, kind } }),
     simulateTick: (enemyId: string) => dispatch({ type: 'TICK', payload: { enemyId } }),
     removeEnemy: (id: string) => dispatch({ type: 'REMOVE', payload: id }),
@@ -707,9 +725,11 @@ export function GameProvider({ children }: GameProviderProps) {
     useSkill: (skillId: string) => dispatch({ type: 'USE_SKILL', payload: skillId }),
     updateEnemyPositions,
     updatePlayerPosition,
-  }
+  }), [updateEnemyPositions, updatePlayerPosition])
 
-  return <GameContext.Provider value={{ state, actions, dispatch }}>{children}</GameContext.Provider>
+  const contextValue = useMemo(() => ({ state, actions, dispatch }), [state, actions])
+
+  return <GameContext.Provider value={contextValue}>{children}</GameContext.Provider>
 }
 
 export function useGame() { 

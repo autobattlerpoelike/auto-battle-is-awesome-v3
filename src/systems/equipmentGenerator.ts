@@ -6,44 +6,77 @@ import {
   EquipmentStats, Attribute
 } from './equipment'
 
-// Weighted random selection
-function weightedRandom<T extends { weight: number }>(items: T[]): T {
-  const totalWeight = items.reduce((sum, item) => sum + item.weight, 0)
+// Optimized weighted random selection helper with caching
+const weightCache = new Map<string, number>()
+
+function weightedRandom<T extends { weight: number }>(items: T[], cacheKey?: string): T {
+  let totalWeight: number
+  
+  if (cacheKey && weightCache.has(cacheKey)) {
+    totalWeight = weightCache.get(cacheKey)!
+  } else {
+    totalWeight = items.reduce((sum, item) => sum + item.weight, 0)
+    if (cacheKey) {
+      weightCache.set(cacheKey, totalWeight)
+    }
+  }
+  
   let random = Math.random() * totalWeight
   
   for (const item of items) {
     random -= item.weight
-    if (random <= 0) return item
+    if (random <= 0) {
+      return item
+    }
   }
   
   return items[items.length - 1]
 }
 
-// Choose rarity based on level and boss status
-function chooseRarity(level: number, fromBoss: boolean = false): string {
-  const rarityChances = fromBoss ? {
-    Common: Math.max(0, 0.1 - level * 0.01),
-    Magic: Math.max(0, 0.3 - level * 0.015),
-    Rare: Math.max(0.2, 0.4 - level * 0.01),
-    Unique: Math.min(0.3, 0.15 + level * 0.01),
-    Legendary: Math.min(0.2, level * 0.005)
-  } : {
-    Common: Math.max(0.3, 0.7 - level * 0.02),
-    Magic: Math.max(0.2, 0.25 - level * 0.005),
-    Rare: Math.min(0.3, level * 0.01),
-    Unique: Math.min(0.15, level * 0.003),
-    Legendary: Math.min(0.05, level * 0.001)
-  }
+// Cache for rarity calculations
+const rarityCache = new Map<string, Array<{ item: string; weight: number }>>()
 
-  const random = Math.random()
-  let cumulative = 0
+function chooseRarity(level: number, isBoss: boolean = false): string {
+  const cacheKey = `${level}-${isBoss}`
   
-  for (const [rarity, chance] of Object.entries(rarityChances)) {
-    cumulative += chance
-    if (random <= cumulative) return rarity
+  let adjustedWeights: Array<{ item: string; weight: number }>
+  
+  if (rarityCache.has(cacheKey)) {
+    adjustedWeights = rarityCache.get(cacheKey)!
+  } else {
+    const baseWeights = [
+      { item: 'Common', weight: 60 },
+      { item: 'Magic', weight: 25 },
+      { item: 'Rare', weight: 10 },
+      { item: 'Unique', weight: 4 },
+      { item: 'Legendary', weight: 1 }
+    ]
+    
+    // Adjust weights based on level and boss status
+    adjustedWeights = baseWeights.map(({ item, weight }) => {
+      let adjustedWeight = weight
+      
+      // Higher level = better loot
+      if (item === 'Magic') adjustedWeight += Math.floor(level / 5)
+      if (item === 'Rare') adjustedWeight += Math.floor(level / 10)
+      if (item === 'Unique') adjustedWeight += Math.floor(level / 20)
+      if (item === 'Legendary') adjustedWeight += Math.floor(level / 50)
+      
+      // Boss bonus
+      if (isBoss) {
+        if (item === 'Rare') adjustedWeight += 5
+        if (item === 'Unique') adjustedWeight += 3
+        if (item === 'Legendary') adjustedWeight += 2
+      }
+      
+      return { item, weight: Math.max(1, adjustedWeight) }
+    })
+    
+    // Cache the result for future use
+    rarityCache.set(cacheKey, adjustedWeights)
   }
   
-  return 'Common'
+  return weightedRandom(adjustedWeights, cacheKey).item
 }
 
 // Choose equipment type based on level and preferences
@@ -115,6 +148,10 @@ function generateAffixes(category: 'weapon' | 'armor' | 'accessory', rarity: str
   const selectedAffixes: Affix[] = []
   const usedStats = new Set<string>()
   
+  // Pre-calculate multipliers to avoid repeated calculations
+  const levelMultiplier = 1 + (level - 1) * 0.05
+  const rarityMultiplier = rarityInfo.statMultiplier
+  
   for (let i = 0; i < affixCount && availableAffixes.length > 0; i++) {
     // Filter out already used stats
     const unusedAffixes = availableAffixes.filter(affix => !usedStats.has(affix.stat))
@@ -123,13 +160,11 @@ function generateAffixes(category: 'weapon' | 'armor' | 'accessory', rarity: str
     const selectedAffix = weightedRandom(unusedAffixes)
     
     // Scale affix value by level and rarity
-    const levelMultiplier = 1 + (level - 1) * 0.05
-    const rarityMultiplier = rarityInfo.statMultiplier
     const scaledValue = selectedAffix.value * levelMultiplier * rarityMultiplier
     
     selectedAffixes.push({
       ...selectedAffix,
-      value: Math.round(scaledValue * 100) / 100 // Round to 2 decimal places
+      value: Math.max(1, Math.round(scaledValue * 100) / 100) // Ensure minimum value of 1
     })
     
     usedStats.add(selectedAffix.stat)
@@ -249,6 +284,10 @@ export function generateEquipment(level: number, fromBoss: boolean = false): Equ
   
   // Scale base stats by level and rarity
   const rarityInfo = RARITIES[rarity as keyof typeof RARITIES]
+  if (!rarityInfo) {
+    console.warn('Invalid rarity:', rarity, 'defaulting to Common')
+    return generateEquipment(level, false)
+  }
   const levelMultiplier = 1 + (level - 1) * 0.1
   const rarityMultiplier = rarityInfo.statMultiplier
   
