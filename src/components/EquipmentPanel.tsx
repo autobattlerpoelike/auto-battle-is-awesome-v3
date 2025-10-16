@@ -181,7 +181,7 @@ const EquipmentSlotComponent = memo(({
                 <div className="mt-1 pt-1 border-t border-gray-700">
                   <div className="text-xs text-gray-400 mb-1">Requirements:</div>
                   {Object.entries(equippedItem.requirements).map(([attr, value]) => {
-                    const playerValue = (p.attributes as any)?.[attr] || 0
+                    const playerValue = (state.player.attributes as any)?.[attr] || 0
                     const canMeet = playerValue >= (value as number)
                     return (
                       <div key={attr} className={`text-xs ${canMeet ? 'text-green-400' : 'text-red-400'}`}>

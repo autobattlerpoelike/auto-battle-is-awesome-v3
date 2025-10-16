@@ -1015,11 +1015,8 @@ const GameCanvas = React.memo(function GameCanvas() {
         ctx.restore();
       } else if (e.kind === 'whirlwind') {
         // Enhanced Whirlwind/Cyclone effect inspired by PoE
-        const effectScreenPos = { 
-          x: playerPos.x - camera.x + canvas.width / 2, 
-          y: playerPos.y - camera.y + canvas.height / 2 
-        }; // Use current player position in screen space
-        const clampedPlayerPos = clampEffect(effectScreenPos, 80); // Ensure effect stays within bounds
+        const effectScreenPos = worldToScreen(playerPos.x, playerPos.y); // Use proper world to screen conversion
+        const clampedPlayerPos = effectScreenPos; // Use the properly calculated screen position
         const currentTime = Date.now();
         const elapsed = currentTime - e.t;
         const spinSpeed = 0.008; // Faster spinning for more dynamic effect
