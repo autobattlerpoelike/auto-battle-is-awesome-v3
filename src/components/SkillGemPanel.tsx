@@ -52,10 +52,22 @@ export function SkillGemPanel({ isOpen, onClose }: SkillGemPanelProps) {
     }
   }
 
+  const handleUnequipSkill = (skillId: string) => {
+    // Find the skill in the skill bar and unequip it
+    const skillBar = state.player.skillBar
+    if (!skillBar?.slots) return
+    
+    const equippedSlotIndex = skillBar.slots.findIndex(slot => slot?.id === skillId)
+    if (equippedSlotIndex !== -1) {
+      actions.unequipSkillFromBar(equippedSlotIndex)
+    }
+  }
+
   const renderSkillCard = (skill: SkillGem, isLocked: boolean = false) => {
     const canUnlock = !isLocked && state.player.level >= skill.unlockLevel && state.player.skillPoints >= getSkillUnlockCost(skill)
     const canLevel = !isLocked && canLevelUpSkill(skill, state.player.skillPoints)
-    const isEquipped = skill.isEquipped
+    // Check if skill is equipped by looking at the skill bar directly
+    const isEquipped = state.player.skillBar?.slots?.some(slot => slot?.id === skill.id) || false
 
     return (
       <div
@@ -112,6 +124,17 @@ export function SkillGemPanel({ isOpen, onClose }: SkillGemPanelProps) {
               }}
             >
               Equip
+            </button>
+          )}
+          {!isLocked && isEquipped && (
+            <button 
+              className="unequip-btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleUnequipSkill(skill.id)
+              }}
+            >
+              Unequip
             </button>
           )}
         </div>
@@ -228,12 +251,12 @@ export function SkillGemPanel({ isOpen, onClose }: SkillGemPanelProps) {
           {baseValues.area > 1 && (
             <p><strong>Area:</strong> {hasSupports ? (
               <span>
-                <span className="base-value">{baseValues.area.toFixed(2)}x</span>
+                <span className="base-value">{baseValues.area.toFixed(1)}x</span>
                 {finalValues.area !== baseValues.area && (
-                  <span className="final-value"> → {finalValues.area.toFixed(2)}x</span>
+                  <span className="final-value"> → {finalValues.area.toFixed(1)}x</span>
                 )}
               </span>
-            ) : `${baseValues.area.toFixed(2)}x`}</p>
+            ) : `${baseValues.area.toFixed(1)}x`}</p>
           )}
           
           {baseValues.duration > 0 && (

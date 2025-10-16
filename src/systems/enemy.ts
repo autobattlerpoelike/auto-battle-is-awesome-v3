@@ -1,6 +1,11 @@
 export type EnemyType = 'melee' | 'ranged' | 'caster' | 'tank' | 'assassin' | 'boss'
 export type SpecialAbility = 'berserker' | 'precise' | 'regeneration' | 'shield' | 'poison' | 'freeze' | 'lightning' | 'summon'
 
+export interface Position {
+  x: number
+  y: number
+}
+
 export type Enemy = {
   id: string
   name: string
@@ -14,6 +19,7 @@ export type Enemy = {
   alpha?: number
   statusEffects?: string[]
   armor?: number
+  position?: Position // Add position data for distance calculations
 }
 
 const enemyNames = {

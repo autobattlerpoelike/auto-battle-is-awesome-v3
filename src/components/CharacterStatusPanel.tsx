@@ -130,23 +130,23 @@ export default function CharacterStatusPanel() {
           <div className="grid grid-cols-2 gap-1 text-xs">
             <div className="flex justify-between">
               <span>Strength:</span>
-              <span className="text-red-400">{p.attributes?.strength || 10}</span>
+              <span className="text-red-400">{(p.attributes?.strength || 10) + (p.calculatedStats?.strength || 0)}</span>
             </div>
             <div className="flex justify-between">
               <span>Dexterity:</span>
-              <span className="text-green-400">{p.attributes?.dexterity || 10}</span>
+              <span className="text-green-400">{(p.attributes?.dexterity || 10) + (p.calculatedStats?.dexterity || 0)}</span>
             </div>
             <div className="flex justify-between">
               <span>Intelligence:</span>
-              <span className="text-blue-400">{p.attributes?.intelligence || 10}</span>
+              <span className="text-blue-400">{(p.attributes?.intelligence || 10) + (p.calculatedStats?.intelligence || 0)}</span>
             </div>
             <div className="flex justify-between">
               <span>Vitality:</span>
-              <span className="text-orange-400">{p.attributes?.vitality || 10}</span>
+              <span className="text-orange-400">{(p.attributes?.vitality || 10) + (p.calculatedStats?.vitality || 0)}</span>
             </div>
             <div className="flex justify-between">
               <span>Luck:</span>
-              <span className="text-yellow-400">{p.attributes?.luck || 5}</span>
+              <span className="text-yellow-400">{(p.attributes?.luck || 5) + (p.calculatedStats?.luck || 0)}</span>
             </div>
             <div className="flex justify-between">
               <span>Attr Points:</span>

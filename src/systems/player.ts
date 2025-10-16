@@ -31,6 +31,7 @@ export type Player = {
   skillGems: SkillGem[]
   supportGems: SupportGem[]
   skillBar: SkillBar
+  skillCooldowns?: Record<string, number> // Track last usage time for each skill
   
   // Base stats
   attackSpeed?: number
@@ -57,6 +58,19 @@ export const skillDescriptions = {
 }
 
 export function defaultPlayer(): Player {
+  // Create skill gems and support gems first
+  const skillGems = MAIN_SKILL_GEMS.map(template => createDefaultSkillGem(template))
+  const supportGems = SUPPORT_GEMS.map(template => createDefaultSupportGem(template))
+  
+  // Find the Whirlwind skill to place in skill bar slot 0
+  const whirlwindSkill = skillGems.find(skill => skill.id === 'whirlwind')
+  
+  // Create skill bar with Whirlwind in first slot
+  const skillBarSlots = new Array(6).fill(null)
+  if (whirlwindSkill) {
+    skillBarSlots[0] = whirlwindSkill
+  }
+  
   return {
     level: 10,
     xp: 0,
@@ -89,10 +103,13 @@ export function defaultPlayer(): Player {
     // Calculated stats (will be computed)
     calculatedStats: {},
     
-    // Skill Gem System - Initialize all skill gems and support gems
-    skillGems: MAIN_SKILL_GEMS.map(template => createDefaultSkillGem(template)),
-    supportGems: SUPPORT_GEMS.map(template => createDefaultSupportGem(template)),
-    skillBar: createDefaultSkillBar(),
+    // Skill Gem System - Use the created skill gems and skill bar
+    skillGems,
+    supportGems,
+    skillBar: {
+      slots: skillBarSlots,
+      maxSlots: 6
+    },
     
     // Base stats
     attackSpeed: 1,

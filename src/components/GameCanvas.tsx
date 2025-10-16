@@ -37,6 +37,7 @@ interface Effect {
   size?: number
   color: string
   angle?: number
+  duration?: number
 }
 
 interface Particle {
@@ -70,6 +71,11 @@ export default function GameCanvas() {
   const [dying, setDying] = useState<Record<string, number>>({})
   const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1 })
   const [idleAnimation, setIdleAnimation] = useState<number>(0)
+  const [whirlwindState, setWhirlwindState] = useState<{active: boolean, startTime: number, rotation: number}>({
+    active: false, 
+    startTime: 0, 
+    rotation: 0
+  })
 
   // Isometric transformation functions
   const worldToIso = (worldX: number, worldY: number): Position => {
@@ -97,10 +103,19 @@ export default function GameCanvas() {
       map[e.id] = { x: CANVAS_W - 120 - i*28 + (Math.random()-0.5)*30, y: CANVAS_H/2 + (i%5 -2)*36 + (Math.random()-0.5)*20 }
     })
     setEnemyPositions(map)
+    // Sync positions with game state for distance checking
+    actions.updateEnemyPositions(map)
     setProjectiles(p => p.slice(-120))
   }, [state.enemies.length])
 
   const clamp = (p: Position): Position => ({ x: Math.max(30, Math.min(CANVAS_W-30, p.x)), y: Math.max(30, Math.min(CANVAS_H-30, p.y)) })
+  const clampEffect = (p: Position, radius: number = 50): Position => ({ 
+    x: Math.max(radius, Math.min(CANVAS_W-radius, p.x)), 
+    y: Math.max(radius, Math.min(CANVAS_H-radius, p.y)) 
+  })
+  const isWithinBounds = (p: Position, radius: number = 0): boolean => {
+    return p.x >= radius && p.x <= CANVAS_W - radius && p.y >= radius && p.y <= CANVAS_H - radius
+  }
   const dist = (a: Position, b: Position): number => Math.hypot(a.x-b.x, a.y-b.y)
   const moveTowards = (from: Position, to: Position, s: number): Position => {
     const dx = to.x-from.x, dy = to.y-from.y, d=Math.hypot(dx,dy)||1;
@@ -111,7 +126,7 @@ export default function GameCanvas() {
   const lastLog = useRef('')
   useEffect(() => {
     if (!state.log || state.log.length===0) return
-    const latest = state.log[state.log.length-1]
+    const latest = state.log[0] // Read from beginning since logs are added with unshift()
     if (latest === lastLog.current) return
     lastLog.current = latest
     if (latest.startsWith('ANIM_PLAYER|')) {
@@ -143,8 +158,152 @@ export default function GameCanvas() {
       const match = latest.match(/Loot: (.+)$/)
       if (match) setEffects(s => [...s, { kind:'pickup', x: 220, y: 60, t: Date.now(), ttl: 1200, text: match[1], color:'#fff' }])
     }
+    
+    // Handle dodge/miss feedback
+    if (latest.includes('dodged')) {
+      if (latest.includes('Player dodged')) {
+        // Player dodged enemy attack
+        setEffects(s => [...s, { 
+          kind: 'dodge', 
+          x: playerPos.x + (Math.random()-0.5)*20, 
+          y: playerPos.y - 20 + (Math.random()-0.5)*10, 
+          t: Date.now(), 
+          ttl: 1200, 
+          text: 'DODGE!', 
+          color: '#22d3ee',
+          size: 16
+        }])
+      } else {
+        // Enemy dodged player attack - find which enemy
+        const enemyMatch = latest.match(/(.+) dodged/)
+        if (enemyMatch) {
+          const enemyName = enemyMatch[1]
+          const enemy = state.enemies.find(e => e.name === enemyName)
+          if (enemy) {
+            const pos = enemyPositions[enemy.id]
+            if (pos) {
+              setEffects(s => [...s, { 
+                kind: 'miss', 
+                x: pos.x + (Math.random()-0.5)*20, 
+                y: pos.y - 20 + (Math.random()-0.5)*10, 
+                t: Date.now(), 
+                ttl: 1200, 
+                text: 'MISS!', 
+                color: '#94a3b8',
+                size: 14
+              }])
+            }
+          }
+        }
+      }
+    }
+    
+    // Handle enemy damage to player
+    if (latest.includes('hits back for')) {
+      const damageMatch = latest.match(/hits back for (\d+)/)
+      if (damageMatch) {
+        const damage = parseInt(damageMatch[1])
+        setEffects(s => [...s, { 
+          kind: 'player_damage', 
+          x: playerPos.x + (Math.random()-0.5)*15, 
+          y: playerPos.y - 15 + (Math.random()-0.5)*8, 
+          t: Date.now(), 
+          ttl: 1400, 
+          text: `-${damage}`, 
+          color: '#ef4444',
+          size: Math.min(24, 12 + Math.floor(damage/3))
+        }])
+      }
+    }
+    
+    // Handle blocked attacks
+    if (latest.includes('blocked')) {
+      if (latest.includes('Player blocked')) {
+        setEffects(s => [...s, { 
+          kind: 'block', 
+          x: playerPos.x + (Math.random()-0.5)*20, 
+          y: playerPos.y - 20 + (Math.random()-0.5)*10, 
+          t: Date.now(), 
+          ttl: 1200, 
+          text: 'BLOCK!', 
+          color: '#fbbf24',
+          size: 16
+        }])
+      }
+    }
+    
     if (latest.startsWith('🔥 Critical Hit!')) {
       // Add critical hit effect if needed
+    }
+    if (latest.startsWith('ANIM_SKILL|')) {
+      const parts = latest.split('|')
+      const skillType = parts[1]
+      
+      if (skillType === 'whirlwind') {
+        const startTime = Number(parts[2])
+        const duration = Number(parts[3])
+        
+        // Activate Whirlwind spinning state
+        setWhirlwindState({
+          active: true,
+          startTime: Date.now(),
+          rotation: 0
+        })
+        
+        // Set timer to deactivate Whirlwind after duration
+        setTimeout(() => {
+          setWhirlwindState(prev => ({ ...prev, active: false }))
+        }, duration)
+        
+        setEffects(s => [...s, { 
+          kind: 'whirlwind', 
+          x: playerPos.x, 
+          y: playerPos.y, 
+          t: startTime, 
+          ttl: duration, 
+          color: '#fbbf24',
+          duration: duration
+        }])
+      } else if (skillType === 'heal') {
+        setEffects(s => [...s, { 
+          kind: 'heal', 
+          x: playerPos.x, 
+          y: playerPos.y, 
+          t: Date.now(), 
+          ttl: 2000, 
+          color: '#10b981'
+        }])
+      } else if (skillType === 'fireball') {
+        setEffects(s => [...s, { 
+          kind: 'explosion', 
+          x: playerPos.x, 
+          y: playerPos.y, 
+          t: Date.now(), 
+          ttl: 800,
+          color: '#ff4400',
+          size: 20
+        }])
+      } else if (skillType === 'lightning_bolt') {
+        setEffects(s => [...s, { 
+          kind: 'lightning', 
+          x: playerPos.x, 
+          y: playerPos.y, 
+          t: Date.now(), 
+          ttl: 600,
+          color: '#00aaff',
+          size: 15
+        }])
+      } else if (skillType === 'power_strike') {
+        setEffects(s => [...s, { 
+          kind: 'power_strike', 
+          x: playerPos.x, 
+          y: playerPos.y, 
+          t: Date.now(), 
+          ttl: 700,
+          color: '#ffaa00',
+          size: 18
+        }])
+      }
     }
   }, [state.log, enemyPositions, playerPos])
 
@@ -163,6 +322,15 @@ export default function GameCanvas() {
       // Update idle animation
       setIdleAnimation(now / 1000)
 
+      // Update Whirlwind rotation
+      if (whirlwindState.active) {
+        const elapsed = now - whirlwindState.startTime
+        setWhirlwindState(prev => ({
+          ...prev,
+          rotation: elapsed * 0.01 // Fast spinning
+        }))
+      }
+
       // Move player towards nearest enemy or idle movement
       if (state.enemies.length > 0) {
         let nearestEnemy: any = null
@@ -176,27 +344,94 @@ export default function GameCanvas() {
         })
         if (nearestEnemy && nearestPos) {
           const attackRange = (state.player.equipped?.type === 'ranged' ? 180 : 48)
-          if (nd > attackRange) {
-            const newPos = clamp(moveTowards(playerPos, nearestPos, 1.1))
-            // Check collision with all enemies before moving
+          
+          // Whirlwind movement - move towards enemies in a spinning pattern
+          if (whirlwindState.active) {
+            const whirlwindSpeed = 2.5 // Faster movement during Whirlwind
+            const spiralRadius = 15 // Small spiral movement
+            const spiralOffset = {
+              x: Math.cos(whirlwindState.rotation * 3) * spiralRadius,
+              y: Math.sin(whirlwindState.rotation * 3) * spiralRadius
+            }
+            
+            const targetPos = {
+              x: nearestPos.x + spiralOffset.x,
+              y: nearestPos.y + spiralOffset.y
+            }
+            
+            const newPos = clamp(moveTowards(playerPos, targetPos, whirlwindSpeed))
+            
+            // Enhanced collision detection with proper radii
             let canMove = true
             state.enemies.forEach(e => {
               const enemyPos = enemyPositions[e.id]
-              if (enemyPos && checkCollision(newPos, enemyPos, 16, 20)) {
-                canMove = false
+              if (enemyPos) {
+                // Calculate enemy radius based on type and level
+                let enemyRadius = 12
+                if (e.type === 'melee') {
+                  enemyRadius = 12 + e.level * 0.8
+                } else if (e.type === 'ranged') {
+                  enemyRadius = 10 + e.level * 0.6
+                } else {
+                  enemyRadius = 14 + e.level * 1.0
+                }
+                
+                // Player radius is 16, add small buffer for smooth movement
+                if (checkCollision(newPos, enemyPos, 18, enemyRadius + 2)) {
+                  canMove = false
+                }
               }
             })
-            if (canMove) setPlayerPos(newPos)
+            if (canMove) {
+              setPlayerPos(newPos)
+              actions.updatePlayerPosition(newPos)
+            }
+          } else if (nd > attackRange) {
+            const newPos = clamp(moveTowards(playerPos, nearestPos, 1.1))
+            // Enhanced collision detection with proper radii
+            let canMove = true
+            state.enemies.forEach(e => {
+              const enemyPos = enemyPositions[e.id]
+              if (enemyPos) {
+                // Calculate enemy radius based on type and level
+                let enemyRadius = 12
+                if (e.type === 'melee') {
+                  enemyRadius = 12 + e.level * 0.8
+                } else if (e.type === 'ranged') {
+                  enemyRadius = 10 + e.level * 0.6
+                } else {
+                  enemyRadius = 14 + e.level * 1.0
+                }
+                
+                // Player radius is 16, add small buffer for smooth movement
+                if (checkCollision(newPos, enemyPos, 18, enemyRadius + 2)) {
+                  canMove = false
+                }
+              }
+            })
+            if (canMove) {
+              setPlayerPos(newPos)
+              actions.updatePlayerPosition(newPos)
+            }
           } else {
-            setPlayerPos(p => ({ x: p.x + Math.sin(now/300)*0.2, y: p.y + Math.cos(now/300)*0.2 }))
+            // Combat stance - slight movement while in range
+            setPlayerPos(p => {
+              const newPos = { x: p.x + Math.sin(now/300)*0.2, y: p.y + Math.cos(now/300)*0.2 }
+              actions.updatePlayerPosition(newPos)
+              return newPos
+            })
           }
         }
       } else {
         // Idle movement animation when no enemies
-        setPlayerPos(p => ({
-          x: p.x + Math.sin(now / 2000) * 0.5,
-          y: p.y + Math.cos(now / 3000) * 0.3
-        }))
+        setPlayerPos(p => {
+          const newPos = {
+            x: p.x + Math.sin(now / 2000) * 0.5,
+            y: p.y + Math.cos(now / 3000) * 0.3
+          }
+          actions.updatePlayerPosition(newPos)
+          return newPos
+        })
       }
 
       // Update camera to follow player
@@ -221,15 +456,37 @@ export default function GameCanvas() {
           const dx = playerPos.x - p.x, dy = playerPos.y - p.y, d = Math.hypot(dx,dy)||1
           const newPos = { x: p.x + dx/d*0.3, y: p.y + dy/d*0.3 }
           
-          // Check collision with player
-          if (!checkCollision(newPos, playerPos, 20, 16)) {
+          // Calculate current enemy radius
+          let currentEnemyRadius = 12
+          if (e.type === 'melee') {
+            currentEnemyRadius = 12 + e.level * 0.8
+          } else if (e.type === 'ranged') {
+            currentEnemyRadius = 10 + e.level * 0.6
+          } else {
+            currentEnemyRadius = 14 + e.level * 1.0
+          }
+          
+          // Check collision with player (player radius 16)
+          if (!checkCollision(newPos, playerPos, currentEnemyRadius + 2, 18)) {
             // Check collision with other enemies
             let canMove = true
             state.enemies.forEach(otherE => {
               if (otherE.id !== e.id) {
                 const otherPos = next[otherE.id]
-                if (otherPos && checkCollision(newPos, otherPos, 20, 20)) {
-                  canMove = false
+                if (otherPos) {
+                  // Calculate other enemy radius
+                  let otherEnemyRadius = 12
+                  if (otherE.type === 'melee') {
+                    otherEnemyRadius = 12 + otherE.level * 0.8
+                  } else if (otherE.type === 'ranged') {
+                    otherEnemyRadius = 10 + otherE.level * 0.6
+                  } else {
+                    otherEnemyRadius = 14 + otherE.level * 1.0
+                  }
+                  
+                  if (checkCollision(newPos, otherPos, currentEnemyRadius + 1, otherEnemyRadius + 1)) {
+                    canMove = false
+                  }
                 }
               }
             })
@@ -241,8 +498,49 @@ export default function GameCanvas() {
         return next
       })
 
-      // Update projectiles
-      setProjectiles(prev => prev.map(p => ({ ...p, x: p.x + p.vx, y: p.y + p.vy, life: p.life - dt })).filter(p => p.life > 0))
+      // Update projectiles and check for impacts
+      setProjectiles(prev => {
+        const updated = prev.map(p => ({ ...p, x: p.x + p.vx, y: p.y + p.vy, life: p.life - dt }))
+        
+        // Check for projectile-enemy collisions
+        const remaining = updated.filter(p => {
+          if (p.life <= 0) return false
+          
+          // Check collision with enemies
+          let hit = false
+          state.enemies.forEach(e => {
+            const enemyPos = enemyPositions[e.id]
+            if (enemyPos && !hit) {
+              let enemyRadius = 12
+              if (e.type === 'melee') {
+                enemyRadius = 12 + e.level * 0.8
+              } else if (e.type === 'ranged') {
+                enemyRadius = 10 + e.level * 0.6
+              } else {
+                enemyRadius = 14 + e.level * 1.0
+              }
+              
+              if (checkCollision({x: p.x, y: p.y}, enemyPos, p.radius, enemyRadius)) {
+                // Create impact effect
+                setEffects(s => [...s, { 
+                  kind: 'impact', 
+                  x: p.x, 
+                  y: p.y, 
+                  t: Date.now(), 
+                  ttl: 300, 
+                  color: p.color,
+                  size: p.size * 2
+                }])
+                hit = true
+              }
+            }
+          })
+          
+          return !hit
+        })
+        
+        return remaining
+      })
 
       // Update effects
       setEffects(prev => prev.filter(e => (Date.now() - e.t) < e.ttl))
@@ -334,13 +632,28 @@ export default function GameCanvas() {
       animationOffset = Math.sin(idleAnimation * 2) * 2 * camera.zoom;
     }
     
-    ctx.fillStyle = '#000000';
+    ctx.save();
+    
+    // Apply rotation during Whirlwind
+    if (whirlwindState.active) {
+      ctx.translate(playerScreenPos.x, playerScreenPos.y + animationOffset);
+      ctx.rotate(whirlwindState.rotation);
+      ctx.translate(-playerScreenPos.x, -playerScreenPos.y - animationOffset);
+      
+      // Add spinning blur effect
+      ctx.shadowColor = '#ffffff';
+      ctx.shadowBlur = 8 * camera.zoom;
+    }
+    
+    ctx.fillStyle = whirlwindState.active ? '#ffffff' : '#000000'; // White during Whirlwind
     ctx.fillRect(
       playerScreenPos.x - playerSize/2, 
       playerScreenPos.y - playerSize/2 + animationOffset, 
       playerSize, 
       playerSize
     );
+    
+    ctx.restore();
 
     // Draw player HP bar
     drawHpBar(ctx, playerScreenPos.x, playerScreenPos.y - 35 * camera.zoom + animationOffset, 50 * camera.zoom, 8 * camera.zoom, state.player.hp, state.player.maxHp, 1);
@@ -369,25 +682,175 @@ export default function GameCanvas() {
       const age = Date.now() - e.t;
       const progress = Math.min(1, age / e.ttl);
 
-      if (e.kind === 'damage') {
+      if (e.kind === 'damage' || e.kind === 'player_damage' || e.kind === 'dodge' || e.kind === 'miss' || e.kind === 'block') {
         ctx.save();
         ctx.globalAlpha = 1 - progress;
         ctx.fillStyle = e.color;
-        ctx.font = `${(e.size || 16) * camera.zoom}px bold sans-serif`;
+        
+        // Different font styles for different effect types
+        if (e.kind === 'dodge' || e.kind === 'miss' || e.kind === 'block') {
+          ctx.font = `bold ${(e.size || 16) * camera.zoom}px Arial`;
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 2 * camera.zoom;
+        } else {
+          ctx.font = `${(e.size || 16) * camera.zoom}px bold sans-serif`;
+        }
+        
         ctx.textAlign = 'center';
-        ctx.fillText(e.text || '', effectScreenPos.x, effectScreenPos.y - progress * 20 * camera.zoom);
+        const textY = effectScreenPos.y - progress * 20 * camera.zoom;
+        
+        // Add outline for better visibility on dodge/miss/block
+        if (e.kind === 'dodge' || e.kind === 'miss' || e.kind === 'block') {
+          ctx.strokeText(e.text || '', effectScreenPos.x, textY);
+        }
+        
+        ctx.fillText(e.text || '', effectScreenPos.x, textY);
+        ctx.restore();
+      } else if (e.kind === 'impact') {
+        ctx.save();
+        ctx.globalAlpha = (1 - progress) * 0.8;
+        ctx.fillStyle = e.color;
+        
+        // Create expanding circle impact effect
+        const radius = (e.size || 8) * progress * 2;
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Add inner bright flash
+        ctx.globalAlpha = (1 - progress) * 0.4;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        
         ctx.restore();
       } else if (e.kind === 'slash') {
         ctx.save();
-        ctx.globalAlpha = 1 - progress;
+        ctx.globalAlpha = (1 - progress) * 0.9;
+        
+        const angle = e.angle || 0;
+        const length = (e.size || 30) * camera.zoom;
+        const thickness = 4 * camera.zoom * (1 - progress * 0.5);
+        
+        // Create animated slash that grows and fades
+        const animProgress = Math.sin(progress * Math.PI);
+        const currentLength = length * animProgress;
+        
+        const startX = effectScreenPos.x - Math.cos(angle) * currentLength / 2;
+        const startY = effectScreenPos.y - Math.sin(angle) * currentLength / 2;
+        const endX = effectScreenPos.x + Math.cos(angle) * currentLength / 2;
+        const endY = effectScreenPos.y + Math.sin(angle) * currentLength / 2;
+        
+        // Draw main slash
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = thickness;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+        
+        // Add bright inner slash
+        ctx.globalAlpha = (1 - progress) * 0.6;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = thickness * 0.4;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+        
+        // Add sparks at the ends
+        if (progress < 0.7) {
+          ctx.globalAlpha = (1 - progress) * 0.8;
+          ctx.fillStyle = e.color;
+          
+          // Spark at start
+          ctx.beginPath();
+          ctx.arc(startX, startY, 2 * camera.zoom, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Spark at end
+          ctx.beginPath();
+          ctx.arc(endX, endY, 2 * camera.zoom, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        
+        ctx.restore();
+      } else if (e.kind === 'explosion') {
+        ctx.save();
+        const progress = Math.min(1, age / e.ttl);
+        ctx.globalAlpha = (1 - progress) * 0.8;
+        
+        // Create expanding explosion effect
+        const radius = (e.size || 15) * progress * 1.5;
+        
+        // Outer explosion ring
+        ctx.fillStyle = e.color;
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Inner bright core
+        ctx.globalAlpha = (1 - progress) * 0.6;
+        ctx.fillStyle = '#ffff88';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
+      } else if (e.kind === 'lightning') {
+        ctx.save();
+        const progress = Math.min(1, age / e.ttl);
+        ctx.globalAlpha = (1 - progress) * 0.9;
+        
+        // Create lightning bolt effect
         ctx.strokeStyle = e.color;
         ctx.lineWidth = 3 * camera.zoom;
-        ctx.translate(effectScreenPos.x, effectScreenPos.y);
-        ctx.rotate(e.angle || 0);
+        ctx.lineCap = 'round';
+        
+        // Draw jagged lightning bolt
+        const segments = 6;
+        const length = (e.size || 12) * camera.zoom;
         ctx.beginPath();
-        ctx.moveTo(-15 * camera.zoom, 0);
-        ctx.lineTo(15 * camera.zoom, 0);
+        ctx.moveTo(effectScreenPos.x, effectScreenPos.y - length);
+        
+        for (let i = 1; i <= segments; i++) {
+          const y = effectScreenPos.y - length + (i / segments) * length * 2;
+          const x = effectScreenPos.x + (Math.random() - 0.5) * 20 * camera.zoom;
+          ctx.lineTo(x, y);
+        }
         ctx.stroke();
+        
+        // Add bright inner bolt
+        ctx.globalAlpha = (1 - progress) * 0.7;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1 * camera.zoom;
+        ctx.stroke();
+        
+        ctx.restore();
+      } else if (e.kind === 'power_strike') {
+        ctx.save();
+        const progress = Math.min(1, age / e.ttl);
+        ctx.globalAlpha = (1 - progress) * 0.8;
+        
+        // Create power strike shockwave
+        const radius = (e.size || 16) * progress * 2;
+        
+        // Outer shockwave
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 4 * camera.zoom;
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Inner energy burst
+        ctx.globalAlpha = (1 - progress) * 0.5;
+        ctx.fillStyle = '#ffff00';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        
         ctx.restore();
       } else if (e.kind === 'pickup') {
         ctx.save();
@@ -405,6 +868,122 @@ export default function GameCanvas() {
         ctx.beginPath();
         ctx.arc(e.x, e.y, progress * 20, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.restore();
+      } else if (e.kind === 'whirlwind') {
+        // Enhanced Whirlwind/Cyclone effect inspired by PoE
+        const effectScreenPos = { x: e.x, y: e.y }; // Effect coordinates are already in screen space
+        const clampedPlayerPos = clampEffect(effectScreenPos, 80); // Ensure effect stays within bounds
+        const currentTime = Date.now();
+        const elapsed = currentTime - e.t;
+        const spinSpeed = 0.008; // Faster spinning for more dynamic effect
+        const rotation = elapsed * spinSpeed;
+        
+        ctx.save();
+        
+        // Base alpha that pulses slightly - increased for better visibility
+        const baseAlpha = Math.max(0.7, 1 - progress);
+        const pulseAlpha = baseAlpha + Math.sin(elapsed * 0.01) * 0.2;
+        
+        // Outer cyclone rings - multiple layers
+        for (let layer = 0; layer < 4; layer++) {
+          const layerProgress = (layer + 1) / 4;
+          const radius = (30 + layer * 12) * camera.zoom;
+          const layerRotation = rotation * (1 + layer * 0.3); // Different speeds per layer
+          
+          ctx.globalAlpha = pulseAlpha * (1 - layerProgress * 0.2);
+          ctx.strokeStyle = layer === 0 ? '#FFFFFF' : '#F0F0F0'; // White colors for visibility
+          ctx.lineWidth = (4 - layer) * camera.zoom;
+          
+          // Dashed spinning effect
+          ctx.beginPath();
+          ctx.setLineDash([15 * camera.zoom, 8 * camera.zoom]);
+          ctx.lineDashOffset = layerRotation * 30;
+          ctx.arc(clampedPlayerPos.x, clampedPlayerPos.y, radius, 0, Math.PI * 2);
+           ctx.stroke();
+         }
+         
+         // Inner energy core
+         ctx.globalAlpha = pulseAlpha * 0.9;
+         ctx.fillStyle = '#FFFFFF';
+         ctx.beginPath();
+         ctx.arc(clampedPlayerPos.x, clampedPlayerPos.y, 8 * camera.zoom, 0, Math.PI * 2);
+         ctx.fill();
+         
+         // Spinning energy trails
+         ctx.globalAlpha = pulseAlpha * 0.8;
+         ctx.strokeStyle = '#FFFFFF';
+         ctx.lineWidth = 2 * camera.zoom;
+         
+         for (let trail = 0; trail < 6; trail++) {
+           const trailAngle = rotation * 2 + (trail * Math.PI / 3);
+           const trailRadius = 25 * camera.zoom;
+           const startX = clampedPlayerPos.x + Math.cos(trailAngle) * trailRadius;
+           const startY = clampedPlayerPos.y + Math.sin(trailAngle) * trailRadius;
+           const endX = clampedPlayerPos.x + Math.cos(trailAngle + 0.5) * (trailRadius + 15 * camera.zoom);
+           const endY = clampedPlayerPos.y + Math.sin(trailAngle + 0.5) * (trailRadius + 15 * camera.zoom);
+           
+           ctx.beginPath();
+           ctx.moveTo(startX, startY);
+           ctx.lineTo(endX, endY);
+           ctx.stroke();
+         }
+         
+         // Particle sparks around the cyclone
+         ctx.globalAlpha = pulseAlpha * 0.7;
+         ctx.fillStyle = '#FFD54F';
+         
+         for (let spark = 0; spark < 8; spark++) {
+           const sparkAngle = rotation * 3 + (spark * Math.PI / 4);
+           const sparkDistance = (35 + Math.sin(elapsed * 0.005 + spark) * 10) * camera.zoom;
+           const sparkX = clampedPlayerPos.x + Math.cos(sparkAngle) * sparkDistance;
+           const sparkY = clampedPlayerPos.y + Math.sin(sparkAngle) * sparkDistance;
+           const sparkSize = (2 + Math.sin(elapsed * 0.01 + spark) * 1) * camera.zoom;
+          
+          ctx.beginPath();
+          ctx.arc(sparkX, sparkY, sparkSize, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        
+        // AOE Damage Circle - shows the actual damage range
+        ctx.globalAlpha = 0.3 + Math.sin(elapsed * 0.008) * 0.1; // Subtle pulsing
+        ctx.strokeStyle = '#ff6b6b'; // Red color to indicate damage area
+        ctx.lineWidth = 3 * camera.zoom;
+        ctx.setLineDash([10 * camera.zoom, 5 * camera.zoom]); // Dashed circle
+        ctx.lineDashOffset = elapsed * 0.01; // Animated dashes
+        
+        // Calculate the actual Whirlwind damage range (matching gameContext calculation)
+        const whirlwindSkill = state.player.skillBar.slots.find((s: any) => s?.name === 'Whirlwind');
+        if (whirlwindSkill) {
+          const whirlwindArea = whirlwindSkill.scaling.baseArea! + (whirlwindSkill.level - 1) * whirlwindSkill.scaling.areaPerLevel!;
+          const whirlwindRange = whirlwindArea * 30; // Convert area to pixel range
+          const scaledRange = whirlwindRange * camera.zoom;
+          
+          ctx.beginPath();
+          ctx.arc(clampedPlayerPos.x, clampedPlayerPos.y, scaledRange, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        
+        ctx.setLineDash([]); // Reset line dash
+        ctx.restore();
+      } else if (e.kind === 'heal') {
+        // Heal effect - green sparkles around player
+        const playerScreenPos = worldToScreen(playerPos.x, playerPos.y);
+        ctx.save();
+        ctx.globalAlpha = 1 - progress;
+        ctx.fillStyle = e.color;
+        
+        // Draw sparkle effect
+        for (let i = 0; i < 8; i++) {
+          const angle = (i / 8) * Math.PI * 2 + progress * Math.PI * 2;
+          const radius = 30 * camera.zoom * (1 - progress * 0.5);
+          const sparkleX = playerScreenPos.x + Math.cos(angle) * radius;
+          const sparkleY = playerScreenPos.y + Math.sin(angle) * radius;
+          
+          ctx.beginPath();
+          ctx.arc(sparkleX, sparkleY, 3 * camera.zoom, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        
         ctx.restore();
       }
     });

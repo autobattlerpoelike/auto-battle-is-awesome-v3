@@ -31,12 +31,33 @@ interface GameState {
   log: string[]
   skills: Record<string, number>
   autoCombat?: boolean
+  playerPosition?: { x: number; y: number }
 }
 
-interface GameAction {
-  type: string
-  payload?: any
-}
+type GameAction = 
+  | { type: 'LOAD'; payload?: any }
+  | { type: 'SPAWN'; payload?: { level?: number; kind?: string } }
+  | { type: 'TICK'; payload?: { enemyId: string } }
+  | { type: 'REMOVE'; payload: string }
+  | { type: 'EQUIP'; payload: string }
+  | { type: 'UNEQUIP'; payload: string }
+  | { type: 'DISCARD'; payload: string }
+  | { type: 'SELL_ALL' }
+  | { type: 'UPGRADE_SKILL'; payload: string }
+  | { type: 'TOGGLE_AUTO' }
+  | { type: 'RESET' }
+  | { type: 'LOG'; payload: string }
+  | { type: 'UNLOCK_SKILL_GEM'; payload: string }
+  | { type: 'UNLOCK_SUPPORT_GEM'; payload: string }
+  | { type: 'LEVEL_UP_SKILL_GEM'; payload: string }
+  | { type: 'LEVEL_UP_SUPPORT_GEM'; payload: string }
+  | { type: 'EQUIP_SKILL_TO_BAR'; payload: { skillId: string; slotIndex: number } }
+  | { type: 'UNEQUIP_SKILL_FROM_BAR'; payload: number }
+  | { type: 'ATTACH_SUPPORT_GEM'; payload: { skillId: string; supportId: string } }
+  | { type: 'DETACH_SUPPORT_GEM'; payload: { skillId: string; supportId: string } }
+  | { type: 'USE_SKILL'; payload: string }
+  | { type: 'UPDATE_ENEMY_POSITIONS'; payload: Record<string, { x: number; y: number }> }
+  | { type: 'UPDATE_PLAYER_POSITION'; payload: { x: number; y: number } }
 
 interface GameActions {
   spawnEnemy: (level?: number, kind?: string) => void
@@ -58,6 +79,13 @@ interface GameActions {
   unequipSkillFromBar: (slotIndex: number) => void
   attachSupportGem: (skillId: string, supportId: string) => void
   detachSupportGem: (skillId: string, supportId: string) => void
+  
+  // Skill Execution
+  useSkill: (skillId: string) => void
+  
+  // Position Management
+  updateEnemyPositions: (positions: Record<string, { x: number; y: number }>) => void
+  updatePlayerPosition: (position: { x: number; y: number }) => void
 }
 
 interface GameContextType {
@@ -122,11 +150,68 @@ function reducer(state: GameState, action: GameAction): GameState {
       const targetIndex = enemies.findIndex(e => e.id === enemyId)
       if (targetIndex === -1) return state
       const target = { ...enemies[targetIndex] }
-      const res = simulateCombatTick(state.player, target)
+      
+      // Automatic Whirlwind activation - always active during combat
+      let updatedPlayer = { ...state.player }
+      let skillLog: string[] = []
+      
+      // Initialize skill cooldowns if not present
+      if (!updatedPlayer.skillCooldowns) {
+        updatedPlayer.skillCooldowns = {}
+      }
+      
+      const currentTime = Date.now()
+      const whirlwindSkill = updatedPlayer.skillGems.find(s => s.id === 'whirlwind')
+      
+      // Automatic Whirlwind activation every tick (continuous channeling behavior)
+      if (whirlwindSkill && whirlwindSkill.isUnlocked) {
+        const lastUsed = updatedPlayer.skillCooldowns['whirlwind'] || 0
+        const cooldownTime = whirlwindSkill.scaling.baseCooldown || whirlwindSkill.cooldown
+        
+        // With zero cooldown, Whirlwind can activate every tick for true channeling
+        if (cooldownTime === 0 || currentTime - lastUsed >= cooldownTime) {
+          // Activate Whirlwind automatically
+          updatedPlayer.skillCooldowns['whirlwind'] = currentTime
+          
+          // Calculate Whirlwind area of effect
+          const whirlwindArea = whirlwindSkill.scaling.baseArea! + (whirlwindSkill.level - 1) * whirlwindSkill.scaling.areaPerLevel!
+          const whirlwindRange = whirlwindArea * 30 // Convert area to pixel range (base area 2.5 = ~75 pixel range)
+          
+          // Apply Whirlwind effects only to enemies within range
+          skillLog.push(`ANIM_SKILL|whirlwind|${currentTime}|3000`)
+          const damage = Math.floor(whirlwindSkill.scaling.baseDamage! + (whirlwindSkill.level - 1) * whirlwindSkill.scaling.damagePerLevel!)
+          
+          // Player position (use actual position from state, fallback to default if not set)
+          const playerPosition = state.playerPosition || { x: 150, y: 300 }
+          
+          let enemiesHit = 0
+          enemies.forEach(enemy => {
+            if (enemy.hp > 0 && enemy.position) {
+              // Calculate distance between player and enemy
+              const distance = Math.hypot(
+                enemy.position.x - playerPosition.x,
+                enemy.position.y - playerPosition.y
+              )
+              
+              const isInRange = distance <= whirlwindRange
+              
+              if (isInRange) {
+                enemy.hp = Math.max(0, enemy.hp - damage)
+                skillLog.push(`Whirlwind spins through ${enemy.name} for ${damage} damage! (distance: ${Math.round(distance)})`)
+                enemiesHit++
+              }
+            }
+          })
+          
+          skillLog.push(`🌪️ Whirlwind channels continuously! (${enemiesHit} enemies hit, range: ${Math.round(whirlwindRange)})`)
+        }
+      }
+      
+      const res = simulateCombatTick(updatedPlayer, target)
       const newPlayer = { ...res.player }
       let newEnemies = [...enemies]
       newEnemies[targetIndex] = res.enemy
-      let newLog = [res.message, ...state.log].slice(0,200)
+      let newLog = [...skillLog, res.message, ...state.log].slice(0,200)
 
       // If player hit (res.didPlayerHit), emit ANIM_PLAYER marker so visuals spawn
       if (res.didPlayerHit) {
@@ -444,6 +529,94 @@ function reducer(state: GameState, action: GameAction): GameState {
       }
     }
     
+    case 'USE_SKILL': {
+      const skillId = action.payload
+      const skill = state.player.skillGems.find(s => s.id === skillId && s.isEquipped)
+      
+      if (!skill) {
+        return { 
+          ...state, 
+          log: [`Skill not found or not equipped`, ...state.log].slice(0, 200) 
+        }
+      }
+      
+      // For testing purposes, disable mana consumption
+      const manaCost = 0 // skill.manaCost
+      
+      if (state.player.mana < manaCost) {
+        return { 
+          ...state, 
+          log: [`Not enough mana to use ${skill.name}! (${manaCost} required, ${state.player.mana} available)`, ...state.log].slice(0, 200) 
+        }
+      }
+      
+      const updatedPlayer = { ...state.player, mana: Math.max(0, state.player.mana - manaCost) }
+      let newLog = [`Used ${skill.name}!`, ...state.log]
+      
+      // Apply skill effects based on skill type
+      if (skill.id === 'whirlwind') {
+        // Whirlwind hits all nearby enemies
+        newLog.unshift(`ANIM_SKILL|whirlwind|${Date.now()}|3000`) // 3 second duration
+        const damage = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
+        state.enemies.forEach(enemy => {
+          if (enemy.hp > 0) {
+            newLog.unshift(`ANIM_PLAYER|${enemy.id}|whirlwind|Unique|hit|${damage}`)
+          }
+        })
+      } else if (skill.id === 'fireball') {
+        // Fireball targets nearest enemy
+        const nearestEnemy = state.enemies.find(e => e.hp > 0)
+        if (nearestEnemy) {
+          newLog.unshift(`ANIM_SKILL|fireball|${nearestEnemy.id}|${Date.now()}`)
+          const damage = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
+          newLog.unshift(`ANIM_PLAYER|${nearestEnemy.id}|magic|Rare|hit|${damage}`)
+        }
+      } else if (skill.id === 'lightning_bolt') {
+        // Lightning bolt targets nearest enemy
+        const nearestEnemy = state.enemies.find(e => e.hp > 0)
+        if (nearestEnemy) {
+          newLog.unshift(`ANIM_SKILL|lightning|${nearestEnemy.id}|${Date.now()}`)
+          const damage = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
+          newLog.unshift(`ANIM_PLAYER|${nearestEnemy.id}|magic|Magic|hit|${damage}`)
+        }
+      } else if (skill.id === 'power_strike') {
+        // Power strike targets nearest enemy
+        const nearestEnemy = state.enemies.find(e => e.hp > 0)
+        if (nearestEnemy) {
+          const damage = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
+          newLog.unshift(`ANIM_PLAYER|${nearestEnemy.id}|melee|Unique|hit|${damage}`)
+        }
+      } else if (skill.id === 'heal') {
+        // Heal restores player health
+        const healAmount = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
+        updatedPlayer.hp = Math.min(updatedPlayer.maxHp, updatedPlayer.hp + healAmount)
+        newLog.unshift(`ANIM_SKILL|heal|player|${Date.now()}`)
+        newLog.unshift(`Healed for ${healAmount} HP!`)
+      }
+      
+      const calculatedPlayer = calculatePlayerStats(updatedPlayer)
+      saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
+      
+      return { 
+        ...state, 
+        player: calculatedPlayer, 
+        log: newLog.slice(0, 200) 
+      }
+    }
+    
+    case 'UPDATE_ENEMY_POSITIONS': {
+      const positions = action.payload
+      const updatedEnemies = state.enemies.map(enemy => ({
+        ...enemy,
+        position: positions[enemy.id] || enemy.position
+      }))
+      return { ...state, enemies: updatedEnemies }
+    }
+    
+    case 'UPDATE_PLAYER_POSITION': {
+      return { ...state, playerPosition: action.payload }
+    }
+    
     default:
       return state
   }
@@ -464,6 +637,14 @@ export function GameProvider({ children }: GameProviderProps) {
       dispatch({ type: 'LOAD', payload: saved })
     }
   }, [])
+
+  const updateEnemyPositions = (positions: Record<string, { x: number; y: number }>) => {
+    dispatch({ type: 'UPDATE_ENEMY_POSITIONS', payload: positions })
+  }
+
+  const updatePlayerPosition = (position: { x: number; y: number }) => {
+    dispatch({ type: 'UPDATE_PLAYER_POSITION', payload: position })
+  }
 
   // auto-spawn loop
   useEffect(() => {
@@ -505,7 +686,12 @@ export function GameProvider({ children }: GameProviderProps) {
     equipSkillToBar: (skillId: string, slotIndex: number) => dispatch({ type: 'EQUIP_SKILL_TO_BAR', payload: { skillId, slotIndex } }),
     unequipSkillFromBar: (slotIndex: number) => dispatch({ type: 'UNEQUIP_SKILL_FROM_BAR', payload: slotIndex }),
     attachSupportGem: (skillId: string, supportId: string) => dispatch({ type: 'ATTACH_SUPPORT_GEM', payload: { skillId, supportId } }),
-    detachSupportGem: (skillId: string, supportId: string) => dispatch({ type: 'DETACH_SUPPORT_GEM', payload: { skillId, supportId } })
+    detachSupportGem: (skillId: string, supportId: string) => dispatch({ type: 'DETACH_SUPPORT_GEM', payload: { skillId, supportId } }),
+    
+    // Skill Execution
+    useSkill: (skillId: string) => dispatch({ type: 'USE_SKILL', payload: skillId }),
+    updateEnemyPositions,
+    updatePlayerPosition,
   }
 
   return <GameContext.Provider value={{ state, actions, dispatch }}>{children}</GameContext.Provider>
