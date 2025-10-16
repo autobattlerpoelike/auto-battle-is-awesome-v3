@@ -76,6 +76,7 @@ export default function GameCanvas() {
     startTime: 0, 
     rotation: 0
   })
+  const [debugAOE, setDebugAOE] = useState<boolean>(false)
 
   // Isometric transformation functions
   const worldToIso = (worldX: number, worldY: number): Position => {
@@ -107,6 +108,20 @@ export default function GameCanvas() {
     actions.updateEnemyPositions(map)
     setProjectiles(p => p.slice(-120))
   }, [state.enemies.length])
+
+  // Keyboard event handler for debug mode
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === 'd') {
+        setDebugAOE(prev => !prev)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress)
+    }
+  }, [])
 
   const clamp = (p: Position): Position => ({ x: Math.max(30, Math.min(CANVAS_W-30, p.x)), y: Math.max(30, Math.min(CANVAS_H-30, p.y)) })
   const clampEffect = (p: Position, radius: number = 50): Position => ({ 
@@ -346,7 +361,7 @@ export default function GameCanvas() {
           const attackRange = (state.player.equipped?.type === 'ranged' ? 180 : 48)
           
           // Whirlwind movement - move towards enemies in a spinning pattern
-          if (whirlwindState.active) {
+          if (whirlwindState.active && nearestPos) {
             const whirlwindSpeed = 2.5 // Faster movement during Whirlwind
             const spiralRadius = 15 // Small spiral movement
             const spiralOffset = {
@@ -661,6 +676,50 @@ export default function GameCanvas() {
     // Draw player level label
     drawLabel(ctx, `Lv.${state.player.level}`, playerScreenPos.x, playerScreenPos.y - 50 * camera.zoom + animationOffset, 1);
 
+    // Debug AOE Range Visualization
+    if (debugAOE) {
+      const whirlwindSkill = state.player.skillBar.slots.find((s: any) => s?.id === 'whirlwind')
+      if (whirlwindSkill) {
+        ctx.save()
+        
+        // Calculate Whirlwind range (same calculation as in gameContext)
+        const whirlwindArea = whirlwindSkill.scaling.baseArea! + (whirlwindSkill.level - 1) * whirlwindSkill.scaling.areaPerLevel!
+        const whirlwindRange = whirlwindArea * 30 // Convert area to pixel range
+        const scaledRange = whirlwindRange * camera.zoom
+        
+        // Draw debug AOE circle
+        ctx.globalAlpha = 0.3
+        ctx.strokeStyle = '#00ff00' // Bright green for visibility
+        ctx.lineWidth = 3 * camera.zoom
+        ctx.setLineDash([8 * camera.zoom, 4 * camera.zoom]) // Dashed line
+        
+        ctx.beginPath()
+        ctx.arc(playerScreenPos.x, playerScreenPos.y + animationOffset, scaledRange, 0, Math.PI * 2)
+        ctx.stroke()
+        
+        // Add range text
+        ctx.globalAlpha = 0.8
+        ctx.fillStyle = '#00ff00'
+        ctx.font = `${12 * camera.zoom}px Arial`
+        ctx.textAlign = 'center'
+        ctx.fillText(
+          `AOE: ${Math.round(whirlwindRange)}px`, 
+          playerScreenPos.x, 
+          playerScreenPos.y + animationOffset + scaledRange + 15 * camera.zoom
+        )
+        
+        // Add debug info
+        ctx.fillText(
+          `Area: ${whirlwindArea.toFixed(1)}x | Level: ${whirlwindSkill.level}`, 
+          playerScreenPos.x, 
+          playerScreenPos.y + animationOffset + scaledRange + 30 * camera.zoom
+        )
+        
+        ctx.setLineDash([]) // Reset line dash
+        ctx.restore()
+      }
+    }
+
     // draw projectiles
     projectiles.forEach(p => {
       const projectileScreenPos = worldToScreen(p.x, p.y);
@@ -871,7 +930,10 @@ export default function GameCanvas() {
         ctx.restore();
       } else if (e.kind === 'whirlwind') {
         // Enhanced Whirlwind/Cyclone effect inspired by PoE
-        const effectScreenPos = { x: e.x, y: e.y }; // Effect coordinates are already in screen space
+        const effectScreenPos = { 
+          x: playerPos.x - camera.x + canvas.width / 2, 
+          y: playerPos.y - camera.y + canvas.height / 2 
+        }; // Use current player position in screen space
         const clampedPlayerPos = clampEffect(effectScreenPos, 80); // Ensure effect stays within bounds
         const currentTime = Date.now();
         const elapsed = currentTime - e.t;

@@ -93,14 +93,14 @@ export const MAIN_SKILL_GEMS: Omit<SkillGem, 'level' | 'isUnlocked' | 'isEquippe
     maxLevel: 20,
     unlockLevel: 1, // Available from start
     skillPointCost: 0, // Free to unlock
-    manaCost: 8, // Reduced mana cost for continuous use
+    manaCost: 0, // Set to 0 for testing purposes
     cooldown: 0, // No cooldown for continuous channeling
     icon: '🌪️',
     scaling: {
       baseDamage: 12, // Increased base damage
       damagePerLevel: 2.5, // Better scaling per level
-      baseManaCost: 8,
-      manaCostPerLevel: 0.3, // Slower mana cost growth
+      baseManaCost: 0, // Set to 0 for testing purposes
+      manaCostPerLevel: 0, // No mana cost growth
       baseCooldown: 0, // No cooldown for true channeling behavior
       cooldownReductionPerLevel: 0, // No cooldown reduction needed
       baseArea: 2.5, // Larger base area

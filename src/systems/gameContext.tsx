@@ -161,7 +161,7 @@ function reducer(state: GameState, action: GameAction): GameState {
       }
       
       const currentTime = Date.now()
-      const whirlwindSkill = updatedPlayer.skillGems.find(s => s.id === 'whirlwind')
+      const whirlwindSkill = updatedPlayer.skillBar.slots.find((s: any) => s?.id === 'whirlwind')
       
       // Automatic Whirlwind activation every tick (continuous channeling behavior)
       if (whirlwindSkill && whirlwindSkill.isUnlocked) {
