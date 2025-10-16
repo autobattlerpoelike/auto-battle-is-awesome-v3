@@ -10,6 +10,7 @@ import CombatPanel from './components/CombatPanel'
 import Modal from './components/Modal'
 import { SkillGemPanel } from './components/SkillGemPanel'
 import { SkillBar } from './components/SkillBar'
+import SkillCombinationsPanel from './components/SkillCombinationsPanel'
 
 export default function App() {
   const [activeModal, setActiveModal] = useState<string | null>(null)
@@ -32,6 +33,8 @@ export default function App() {
         return <SkillTreePanel />
       case 'skillgems':
         return <SkillGemPanel isOpen={true} onClose={closeModal} />
+      case 'combinations':
+        return <SkillCombinationsPanel />
       case 'inventory':
         return <InventoryPanel />
       case 'log':
@@ -51,6 +54,8 @@ export default function App() {
         return 'Skill Tree'
       case 'skillgems':
         return 'Skill Gems'
+      case 'combinations':
+        return 'Skill Combinations'
       case 'inventory':
         return 'Inventory'
       case 'log':

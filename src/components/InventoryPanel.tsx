@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { useGame } from '../systems/gameContext'
 
 function rarityColor(r: string | undefined): string {
@@ -33,30 +33,68 @@ function formatElement(element: string | undefined): string {
   return symbols[element] || ''
 }
 
-export default function InventoryPanel() {
+const InventoryPanel = React.memo(function InventoryPanel() {
   const { state, dispatch, actions } = useGame()
   const [currentPage, setCurrentPage] = useState(0)
   const [viewMode, setViewMode] = useState('list') // 'list' or 'grid'
   const itemsPerPage = viewMode === 'grid' ? 6 : 4
   const maxPages = 10
   
-  const sortedInventory = state.inventory.slice().sort((a,b)=> {
-    const rarityOrder = ['Legendary','Unique','Rare','Magic','Common']
-    const rarityDiff = rarityOrder.indexOf(a.rarity) - rarityOrder.indexOf(b.rarity)
-    if (rarityDiff !== 0) return rarityDiff
-    
-    // Sort by power for legacy items, or by damage/armor for new items
-    const aPower = a.power || (a.baseStats?.damage) || (a.baseStats?.armor) || 0
-    const bPower = b.power || (b.baseStats?.damage) || (b.baseStats?.armor) || 0
-    return bPower - aPower
-  })
+  // Memoize sorted inventory to avoid re-sorting on every render
+  const sortedInventory = useMemo(() => {
+    return state.inventory.slice().sort((a,b)=> {
+      const rarityOrder = ['Legendary','Unique','Rare','Magic','Common']
+      const rarityDiff = rarityOrder.indexOf(a.rarity) - rarityOrder.indexOf(b.rarity)
+      if (rarityDiff !== 0) return rarityDiff
+      
+      // Sort by power for legacy items, or by damage/armor for new items
+      const aPower = a.power || (a.baseStats?.damage) || (a.baseStats?.armor) || 0
+      const bPower = b.power || (b.baseStats?.damage) || (b.baseStats?.armor) || 0
+      return bPower - aPower
+    })
+  }, [state.inventory])
   
-  const totalPages = Math.min(maxPages, Math.ceil(sortedInventory.length / itemsPerPage))
-  const maxItems = maxPages * itemsPerPage
-  const displayInventory = sortedInventory.slice(0, maxItems)
-  const startIndex = currentPage * itemsPerPage
-  const currentItems = displayInventory.slice(startIndex, startIndex + itemsPerPage)
-  const excessItems = sortedInventory.length - maxItems
+  // Memoize pagination calculations
+  const paginationData = useMemo(() => {
+    const totalPages = Math.min(maxPages, Math.ceil(sortedInventory.length / itemsPerPage))
+    const maxItems = maxPages * itemsPerPage
+    const displayInventory = sortedInventory.slice(0, maxItems)
+    const startIndex = currentPage * itemsPerPage
+    const currentItems = displayInventory.slice(startIndex, startIndex + itemsPerPage)
+    const excessItems = sortedInventory.length - maxItems
+    
+    return {
+      totalPages,
+      displayInventory,
+      currentItems,
+      excessItems
+    }
+  }, [sortedInventory, currentPage, itemsPerPage, maxPages])
+  
+  // Memoize sell all value calculation
+  const sellAllValue = useMemo(() => {
+    return state.inventory.reduce((sum, item) => sum + (item.value || 0), 0)
+  }, [state.inventory])
+  
+  // Memoize callbacks
+  const handleSellAll = useCallback(() => {
+    if (window.confirm(`Sell all ${state.inventory.length} items for ${sellAllValue} gold?`)) {
+      actions.sellAll()
+    }
+  }, [state.inventory.length, sellAllValue, actions])
+  
+  const handleViewModeChange = useCallback((mode: string) => {
+    setViewMode(mode)
+    setCurrentPage(0) // Reset to first page when changing view mode
+  }, [])
+  
+  const handleEquip = useCallback((item: any) => {
+    dispatch({ type: 'EQUIP', payload: item.id })
+  }, [dispatch])
+  
+  const handleSell = useCallback((item: any) => {
+    dispatch({ type: 'DISCARD', payload: item.id })
+  }, [dispatch])
 
   return (
     <div className="panel p-4 h-full flex flex-col">
@@ -64,7 +102,7 @@ export default function InventoryPanel() {
         <h2 className="text-lg font-bold">Inventory</h2>
         <div className="flex gap-1">
           <button
-            onClick={() => setViewMode('list')}
+            onClick={() => handleViewModeChange('list')}
             className={`px-2 py-1 rounded text-xs transition-all ${
               viewMode === 'list' 
                 ? 'bg-blue-600 text-white' 
@@ -74,7 +112,7 @@ export default function InventoryPanel() {
             📋 List
           </button>
           <button
-            onClick={() => setViewMode('grid')}
+            onClick={() => handleViewModeChange('grid')}
             className={`px-2 py-1 rounded text-xs transition-all ${
               viewMode === 'grid' 
                 ? 'bg-blue-600 text-white' 
@@ -89,20 +127,16 @@ export default function InventoryPanel() {
         <div className="text-yellow-400 text-sm">Gold: {Math.floor(state.player.gold)}</div>
         {state.inventory.length > 0 && (
           <button
-            onClick={() => {
-              if (window.confirm(`Sell all ${state.inventory.length} items for ${state.inventory.reduce((sum, item) => sum + (item.value || 0), 0)} gold?`)) {
-                actions.sellAll()
-              }
-            }}
+            onClick={handleSellAll}
             className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 rounded text-xs transition-all text-black font-bold"
           >
             💰 Sell All
           </button>
         )}
       </div>
-      {excessItems > 0 && (
+      {paginationData.excessItems > 0 && (
         <div className="mb-3 p-2 bg-orange-900/30 border border-orange-600/40 rounded text-orange-300 text-xs">
-          ⚠️ {excessItems} excess items converted to gold automatically
+          ⚠️ {paginationData.excessItems} excess items converted to gold automatically
         </div>
       )}
 
@@ -110,19 +144,15 @@ export default function InventoryPanel() {
       <div className="flex-1 flex flex-col">
         <div className="flex justify-between items-center mb-2">
           <div className="text-sm text-gray-400">Items</div>
-          {totalPages > 1 && (
+          {paginationData.totalPages > 1 && (
             <div className="text-xs text-gray-400">
-              Page {currentPage + 1} of {totalPages}
+              Page {currentPage + 1} of {paginationData.totalPages}
             </div>
           )}
         </div>
         <div className={`flex-1 ${viewMode === 'grid' ? 'grid grid-cols-2 gap-2' : 'space-y-2'}`}>
-          {displayInventory.length === 0 && <div className="text-gray-400 text-sm col-span-2">No items yet.</div>}
-          {currentItems.map((it) => {
-            console.log('Inventory item:', it)
-            console.log('Item name:', it.name)
-            console.log('Item properties:', Object.keys(it))
-            return (
+          {paginationData.displayInventory.length === 0 && <div className="text-gray-400 text-sm col-span-2">No items yet.</div>}
+          {paginationData.currentItems.map((it) => (
             <div key={it.id} className={`bg-gray-700 rounded border border-gray-600 ${
               viewMode === 'grid' ? 'p-2' : 'p-3'
             }`}>
@@ -180,7 +210,7 @@ export default function InventoryPanel() {
                     className={`bg-blue-600 hover:bg-blue-700 rounded text-xs transition-all ${
                       viewMode === 'grid' ? 'px-1 py-0.5 flex-1' : 'px-2 py-1'
                     }`}
-                    onClick={() => dispatch({ type: 'EQUIP', payload: it.id })}
+                    onClick={() => handleEquip(it.id)}
                   >
                     {viewMode === 'grid' ? '⚡' : 'Equip'}
                   </button>
@@ -188,36 +218,36 @@ export default function InventoryPanel() {
                     className={`bg-red-600 hover:bg-red-700 rounded text-xs transition-all ${
                       viewMode === 'grid' ? 'px-1 py-0.5 flex-1' : 'px-2 py-1'
                     }`}
-                    onClick={() => dispatch({ type: 'DISCARD', payload: it.id })}
+                    onClick={() => handleSell(it.id)}
                   >
                     {viewMode === 'grid' ? '🗑️' : 'Discard'}
                   </button>
                 </div>
               </div>
             </div>
-          )})}
+          ))}
         </div>
         
         {/* Pagination Controls */}
-        {totalPages > 1 && (
+        {paginationData.totalPages > 1 && (
           <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-600">
             <button 
               className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm disabled:opacity-50 transition-all"
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+              disabled={currentPage === 0}
             >
               Previous
             </button>
             <div className="flex items-center gap-2 text-sm text-gray-400">
-              <span>Page {currentPage} of {totalPages}</span>
-              {totalPages >= maxPages && (
+              <span>Page {currentPage + 1} of {paginationData.totalPages}</span>
+              {paginationData.totalPages >= maxPages && (
                 <span className="text-orange-400 text-xs">(Max {maxPages} pages)</span>
               )}
             </div>
             <button 
               className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm disabled:opacity-50 transition-all"
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(p => Math.min(paginationData.totalPages - 1, p + 1))}
+              disabled={currentPage === paginationData.totalPages - 1}
             >
               Next
             </button>
@@ -226,4 +256,6 @@ export default function InventoryPanel() {
       </div>
     </div>
   )
-}
+})
+
+export default InventoryPanel

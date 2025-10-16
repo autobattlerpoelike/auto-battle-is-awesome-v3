@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { useGame } from '../systems/gameContext'
 import { SkillGem, SupportGem, getSkillUnlockCost, getSkillLevelUpCost, canLevelUpSkill, getScaledSkillDamage, getScaledManaCost, getScaledCooldown, getScaledArea, getScaledDuration, getScaledSupportGemValue, getScaledSupportGemModifiers, applyModifiersToSkill } from '../systems/skillGems'
 import { getAvailableSkills, getUnlockedSkills, getAvailableSupportGems, getUnlockedSupportGems } from '../systems/skillManager'
@@ -10,36 +10,39 @@ interface SkillGemPanelProps {
 
 type TabType = 'skills' | 'supports'
 
-export function SkillGemPanel({ isOpen, onClose }: SkillGemPanelProps) {
+export const SkillGemPanel = React.memo(function SkillGemPanel({ isOpen, onClose }: SkillGemPanelProps) {
   const { state, actions } = useGame()
   const [activeTab, setActiveTab] = useState<TabType>('skills')
   const [selectedSkill, setSelectedSkill] = useState<SkillGem | null>(null)
   const [selectedSupport, setSelectedSupport] = useState<SupportGem | null>(null)
 
+  // Memoize expensive skill calculations
+  const skillData = useMemo(() => ({
+    availableSkills: getAvailableSkills(state.player),
+    unlockedSkills: getUnlockedSkills(state.player),
+    availableSupports: getAvailableSupportGems(state.player),
+    unlockedSupports: getUnlockedSupportGems(state.player)
+  }), [state.player.skillGems, state.player.supportGems, state.player.level, state.player.skillPoints])
+
   if (!isOpen) return null
 
-  const availableSkills = getAvailableSkills(state.player)
-  const unlockedSkills = getUnlockedSkills(state.player)
-  const availableSupports = getAvailableSupportGems(state.player)
-  const unlockedSupports = getUnlockedSupportGems(state.player)
-
-  const handleUnlockSkill = (skillId: string) => {
+  const handleUnlockSkill = useCallback((skillId: string) => {
     actions.unlockSkillGem(skillId)
     setSelectedSkill(null)
-  }
+  }, [actions])
 
-  const handleUnlockSupport = (supportId: string) => {
+  const handleUnlockSupport = useCallback((supportId: string) => {
     actions.unlockSupportGem(supportId)
     setSelectedSupport(null)
-  }
+  }, [actions])
 
-  const handleLevelUpSkill = (skillId: string) => {
+  const handleLevelUpSkill = useCallback((skillId: string) => {
     actions.levelUpSkillGem(skillId)
-  }
+  }, [actions])
 
-  const handleLevelUpSupport = (supportId: string) => {
+  const handleLevelUpSupport = useCallback((supportId: string) => {
     actions.levelUpSupportGem(supportId)
-  }
+  }, [actions])
 
   const handleEquipSkill = (skillId: string) => {
     // Find first empty slot in skill bar
@@ -317,7 +320,7 @@ export function SkillGemPanel({ isOpen, onClose }: SkillGemPanelProps) {
         {selectedSupport.isUnlocked && (
           <div className="attach-to-skill">
             <h4>Attach to Skill:</h4>
-            {unlockedSkills.filter(skill => 
+            {skillData.unlockedSkills.filter(skill => 
               skill.supportGems.length < 5 && 
               !skill.supportGems.some(s => s.id === selectedSupport.id)
             ).map(skill => (
@@ -352,13 +355,13 @@ export function SkillGemPanel({ isOpen, onClose }: SkillGemPanelProps) {
             className={`tab ${activeTab === 'skills' ? 'active' : ''}`}
             onClick={() => setActiveTab('skills')}
           >
-            Active Skills ({unlockedSkills.length}/{state.player.skillGems.length})
+            Active Skills ({skillData.unlockedSkills.length}/{state.player.skillGems.length})
           </button>
           <button 
             className={`tab ${activeTab === 'supports' ? 'active' : ''}`}
             onClick={() => setActiveTab('supports')}
           >
-            Support Gems ({unlockedSupports.length}/{state.player.supportGems.length})
+            Support Gems ({skillData.unlockedSupports.length}/{state.player.supportGems.length})
           </button>
         </div>
 
@@ -369,13 +372,13 @@ export function SkillGemPanel({ isOpen, onClose }: SkillGemPanelProps) {
                 <div className="unlocked-section">
                   <h3>Unlocked Skills</h3>
                   <div className="gems-list">
-                    {unlockedSkills.map(skill => renderSkillCard(skill, false))}
+                    {skillData.unlockedSkills.map(skill => renderSkillCard(skill, false))}
                   </div>
                 </div>
                 <div className="locked-section">
                   <h3>Available Skills</h3>
                   <div className="gems-list">
-                    {availableSkills.map(skill => renderSkillCard(skill, true))}
+                    {skillData.availableSkills.map(skill => renderSkillCard(skill, true))}
                   </div>
                 </div>
                 <div className="unavailable-section">
@@ -394,13 +397,13 @@ export function SkillGemPanel({ isOpen, onClose }: SkillGemPanelProps) {
                 <div className="unlocked-section">
                   <h3>Unlocked Support Gems</h3>
                   <div className="gems-list">
-                    {unlockedSupports.map(support => renderSupportCard(support, false))}
+                    {skillData.unlockedSupports.map(support => renderSupportCard(support, false))}
                   </div>
                 </div>
                 <div className="locked-section">
                   <h3>Available Support Gems</h3>
                   <div className="gems-list">
-                    {availableSupports.map(support => renderSupportCard(support, true))}
+                    {skillData.availableSupports.map(support => renderSupportCard(support, true))}
                   </div>
                 </div>
                 <div className="unavailable-section">
@@ -414,13 +417,15 @@ export function SkillGemPanel({ isOpen, onClose }: SkillGemPanelProps) {
               </>
             )}
           </div>
+        </div>
 
-          <div className="details-panel">
+        <div className="details-panel">
             {activeTab === 'skills' && renderSkillDetails()}
             {activeTab === 'supports' && renderSupportDetails()}
           </div>
         </div>
       </div>
-    </div>
-  )
-}
+    )
+})
+
+export default SkillGemPanel

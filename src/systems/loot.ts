@@ -71,44 +71,13 @@ function getElementColor(element: DamageType): string {
   }
 }
 
-// Test function to debug equipment generation
-export function testEquipmentGeneration() {
-  console.log('=== TESTING EQUIPMENT GENERATION ===')
-  const equipment = generateEquipment(1, false)
-  console.log('Raw equipment object:', equipment)
-  console.log('Equipment name:', equipment.name)
-  console.log('Equipment name type:', typeof equipment.name)
-  console.log('Equipment name length:', equipment.name?.length)
-  
-  const converted = convertEquipmentToLegacyFormat(equipment)
-  console.log('Converted equipment:', converted)
-  console.log('Converted name:', converted.name)
-  console.log('Converted name type:', typeof converted.name)
-  console.log('=== END TEST ===')
-  return converted
-}
-
 export function generateLoot(level: number, fromBoss: boolean = false): any[] {
   const loot = []
-  
-  // Test equipment generation first
-  console.log('Testing equipment generation...')
-  testEquipmentGeneration()
   
   // Generate multiple equipment pieces to increase chance of getting different types
   for (let i = 0; i < 3; i++) {
     const equipment = generateEquipment(level, fromBoss)
-    console.log(`Generated equipment ${i + 1}:`, equipment)
-    console.log('Equipment name:', equipment.name)
-    console.log('Equipment name type:', typeof equipment.name)
-    console.log('Equipment slot:', equipment.slot)
-    console.log('Equipment category:', equipment.category)
-    
     const convertedEquipment = convertEquipmentToLegacyFormat(equipment)
-    console.log('Converted equipment:', convertedEquipment)
-    console.log('Converted equipment name:', convertedEquipment.name)
-    console.log('Converted equipment name type:', typeof convertedEquipment.name)
-    
     loot.push(convertedEquipment)
   }
   

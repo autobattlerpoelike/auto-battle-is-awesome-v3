@@ -1,5 +1,7 @@
 import React from 'react'
 import { useGame } from '../systems/gameContext'
+import { DamageType } from '../systems/combat'
+import { SpecialAbility } from '../systems/enemy'
 
 export default function CombatPanel() {
   const { state, dispatch } = useGame()
@@ -7,7 +9,7 @@ export default function CombatPanel() {
 
   const currentEnemy = enemies[0]
   
-  const formatDamageType = (damageType?: string) => {
+  const formatDamageType = (damageType?: DamageType) => {
     if (!damageType || damageType === 'physical') return ''
     const colors = {
       fire: '🔥',
@@ -15,10 +17,10 @@ export default function CombatPanel() {
       lightning: '⚡',
       poison: '☠️'
     }
-    return colors[damageType as keyof typeof colors] || ''
+    return colors[damageType] || ''
   }
   
-  const formatSpecialAbility = (ability?: string) => {
+  const formatSpecialAbility = (ability?: SpecialAbility) => {
     if (!ability) return ''
     const abilities = {
       berserker: '💢 Berserker',
@@ -30,7 +32,7 @@ export default function CombatPanel() {
       lightning: '⚡ Lightning',
       summon: '👥 Summon'
     }
-    return abilities[ability as keyof typeof abilities] || ability
+    return abilities[ability] || ability
   }
 
   return (
@@ -46,7 +48,6 @@ export default function CombatPanel() {
           </h3>
           <div className="text-sm">
             <div>HP: {currentEnemy.hp}/{currentEnemy.maxHp}</div>
-            <div>DPS: {currentEnemy.dps} {formatDamageType(currentEnemy.damageType)}</div>
             <div>Type: {currentEnemy.type}</div>
             {currentEnemy.armor && <div>Armor: {currentEnemy.armor}</div>}
             {currentEnemy.specialAbility && (

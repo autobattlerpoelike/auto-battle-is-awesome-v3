@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react'
 import { useGame } from '../systems/gameContext'
 
 const CANVAS_W = 1400, CANVAS_H = 700
@@ -61,7 +61,7 @@ function rarityColor(r: string | undefined): string {
   return '#ffffff'
 }
 
-export default function GameCanvas() {
+const GameCanvas = React.memo(function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { state, actions } = useGame()
   const [playerPos, setPlayerPos] = useState<Position>({ x:150, y: CANVAS_H/2 })
@@ -78,24 +78,49 @@ export default function GameCanvas() {
   })
   const [debugAOE, setDebugAOE] = useState<boolean>(false)
 
-  // Isometric transformation functions
-  const worldToIso = (worldX: number, worldY: number): Position => {
+  // Frame rate limiting for better performance
+  const lastFrameTime = useRef<number>(0)
+  const targetFPS = 60
+  const frameInterval = 1000 / targetFPS
+
+  // Object pooling for performance
+  const positionPool = useMemo(() => {
+    const pool: Position[] = []
+    for (let i = 0; i < 1000; i++) {
+      pool.push({ x: 0, y: 0 })
+    }
+    return pool
+  }, [])
+  
+  let poolIndex = 0
+  const getPooledPosition = useCallback((x: number, y: number): Position => {
+    const pos = positionPool[poolIndex % positionPool.length]
+    pos.x = x
+    pos.y = y
+    poolIndex++
+    return pos
+  }, [positionPool])
+
+  // Memoized transformation functions for better performance
+  const worldToIso = useCallback((worldX: number, worldY: number): Position => {
     const isoX = (worldX - worldY) * 0.866 // cos(30°)
     const isoY = (worldX + worldY) * 0.5   // sin(30°)
-    return { x: isoX, y: isoY }
-  }
+    return getPooledPosition(isoX, isoY)
+  }, [getPooledPosition])
 
-  const isoToScreen = (isoPos: Position): Position => {
-    return {
-      x: (isoPos.x - camera.x) * camera.zoom + CANVAS_W / 2,
-      y: (isoPos.y - camera.y) * camera.zoom + CANVAS_H / 2
-    }
-  }
+  const isoToScreen = useCallback((isoPos: Position): Position => {
+    return getPooledPosition(
+      (isoPos.x - camera.x) * camera.zoom + CANVAS_W / 2,
+      (isoPos.y - camera.y) * camera.zoom + CANVAS_H / 2
+    )
+  }, [camera.x, camera.y, camera.zoom, getPooledPosition])
 
-  const worldToScreen = (worldX: number, worldY: number): Position => {
+  const worldToScreen = useCallback((worldX: number, worldY: number): Position => {
     const iso = worldToIso(worldX, worldY)
     return isoToScreen(iso)
-  }
+  }, [worldToIso, isoToScreen])
+
+
 
   // Initialize enemy positions
   useEffect(() => {
@@ -328,23 +353,44 @@ export default function GameCanvas() {
     return distance < (radius1 + radius2)
   }
 
+  // Use refs for animation values that don't need to trigger re-renders
+  const animationStateRef = useRef({
+    idleAnimation: 0,
+    whirlwindRotation: 0,
+    lastUpdate: performance.now(),
+    calculatedPlayerPos: null as Position | null,
+    calculatedEnemyPositions: null as Record<string, Position> | null,
+    calculatedProjectiles: null as Projectile[] | null,
+    calculatedEffects: null as Effect[] | null,
+    calculatedDying: null as Record<string, number> | null,
+    calculatedCamera: null as Camera | null
+  })
+
   // Main game loop
   useEffect(() => {
     let raf = 0, last = performance.now()
     function frame(now: number) {
       const dt = Math.min(40, now - last); last = now
 
-      // Update idle animation
-      setIdleAnimation(now / 1000)
+      // Update idle animation (using ref to avoid setState during render)
+      animationStateRef.current.idleAnimation = now / 1000
 
-      // Update Whirlwind rotation
+      // Update Whirlwind rotation (using ref to avoid setState during render)
       if (whirlwindState.active) {
         const elapsed = now - whirlwindState.startTime
-        setWhirlwindState(prev => ({
-          ...prev,
-          rotation: elapsed * 0.01 // Fast spinning
-        }))
+        animationStateRef.current.whirlwindRotation = elapsed * 0.01 // Fast spinning
       }
+
+      // Store animation calculations in refs to avoid setState during render
+      animationStateRef.current.lastUpdate = now
+      
+      // Calculate new positions but don't set state immediately
+      let newPlayerPos = playerPos
+      let newEnemyPositions = enemyPositions
+      let newProjectiles = projectiles
+      let newEffects = effects
+      let newDying = dying
+      let newCamera = camera
 
       // Move player towards nearest enemy or idle movement
       if (state.enemies.length > 0) {
@@ -358,23 +404,23 @@ export default function GameCanvas() {
           if (d<nd){nd=d; nearestEnemy=e; nearestPos=p}
         })
         if (nearestEnemy && nearestPos) {
-          const attackRange = (state.player.equipped?.type === 'ranged' ? 180 : 48)
+          const attackRange = ((state.player.equipped as any)?.type === 'ranged' ? 180 : 48)
           
           // Whirlwind movement - move towards enemies in a spinning pattern
-          if (whirlwindState.active && nearestPos) {
+          if (whirlwindState.active) {
             const whirlwindSpeed = 2.5 // Faster movement during Whirlwind
             const spiralRadius = 15 // Small spiral movement
             const spiralOffset = {
-              x: Math.cos(whirlwindState.rotation * 3) * spiralRadius,
-              y: Math.sin(whirlwindState.rotation * 3) * spiralRadius
+              x: Math.cos(animationStateRef.current.whirlwindRotation * 3) * spiralRadius,
+              y: Math.sin(animationStateRef.current.whirlwindRotation * 3) * spiralRadius
             }
             
             const targetPos = {
-              x: nearestPos.x + spiralOffset.x,
-              y: nearestPos.y + spiralOffset.y
+              x: (nearestPos as Position).x + spiralOffset.x,
+              y: (nearestPos as Position).y + spiralOffset.y
             }
             
-            const newPos = clamp(moveTowards(playerPos, targetPos, whirlwindSpeed))
+            const calculatedPos = clamp(moveTowards(playerPos, targetPos, whirlwindSpeed))
             
             // Enhanced collision detection with proper radii
             let canMove = true
@@ -392,17 +438,16 @@ export default function GameCanvas() {
                 }
                 
                 // Player radius is 16, add small buffer for smooth movement
-                if (checkCollision(newPos, enemyPos, 18, enemyRadius + 2)) {
+                if (checkCollision(calculatedPos, enemyPos, 18, enemyRadius + 2)) {
                   canMove = false
                 }
               }
             })
             if (canMove) {
-              setPlayerPos(newPos)
-              actions.updatePlayerPosition(newPos)
+              newPlayerPos = calculatedPos
             }
           } else if (nd > attackRange) {
-            const newPos = clamp(moveTowards(playerPos, nearestPos, 1.1))
+            const calculatedPos = clamp(moveTowards(playerPos, nearestPos, 1.1))
             // Enhanced collision detection with proper radii
             let canMove = true
             state.enemies.forEach(e => {
@@ -419,159 +464,199 @@ export default function GameCanvas() {
                 }
                 
                 // Player radius is 16, add small buffer for smooth movement
-                if (checkCollision(newPos, enemyPos, 18, enemyRadius + 2)) {
+                if (checkCollision(calculatedPos, enemyPos, 18, enemyRadius + 2)) {
                   canMove = false
                 }
               }
             })
             if (canMove) {
-              setPlayerPos(newPos)
-              actions.updatePlayerPosition(newPos)
+              newPlayerPos = calculatedPos
             }
           } else {
             // Combat stance - slight movement while in range
-            setPlayerPos(p => {
-              const newPos = { x: p.x + Math.sin(now/300)*0.2, y: p.y + Math.cos(now/300)*0.2 }
-              actions.updatePlayerPosition(newPos)
-              return newPos
-            })
+            newPlayerPos = { 
+              x: playerPos.x + Math.sin(now/300)*0.2, 
+              y: playerPos.y + Math.cos(now/300)*0.2 
+            }
           }
         }
       } else {
         // Idle movement animation when no enemies
-        setPlayerPos(p => {
-          const newPos = {
-            x: p.x + Math.sin(now / 2000) * 0.5,
-            y: p.y + Math.cos(now / 3000) * 0.3
-          }
-          actions.updatePlayerPosition(newPos)
-          return newPos
-        })
+        newPlayerPos = {
+          x: playerPos.x + Math.sin(now / 2000) * 0.5,
+          y: playerPos.y + Math.cos(now / 3000) * 0.3
+        }
       }
 
       // Update camera to follow player
-      const playerIso = worldToIso(playerPos.x, playerPos.y)
-      setCamera(cam => ({
-        x: cam.x + (playerIso.x - cam.x) * 0.1, // Smooth following
-        y: cam.y + (playerIso.y - cam.y) * 0.1,
-        zoom: cam.zoom
-      }))
+      const playerIso = worldToIso(newPlayerPos.x, newPlayerPos.y)
+      newCamera = {
+        x: camera.x + (playerIso.x - camera.x) * 0.1, // Smooth following
+        y: camera.y + (playerIso.y - camera.y) * 0.1,
+        zoom: camera.zoom
+      }
 
       // Move enemies towards player
-      setEnemyPositions(prev => {
-        const next = { ...prev }
-        state.enemies.forEach((e, idx) => {
-          const p = next[e.id] || { x: CANVAS_W - 120, y: CANVAS_H/2 }
-          if (e.hp <= 0) {
-            // Mark enemy as dying
-            setDying(d => ({ ...d, [e.id]: d[e.id] || Date.now() }))
-            return
+      const nextEnemyPositions = { ...enemyPositions }
+      const nextDying = { ...dying }
+      state.enemies.forEach((e, idx) => {
+        const p = nextEnemyPositions[e.id] || { x: CANVAS_W - 120, y: CANVAS_H/2 }
+        if (e.hp <= 0) {
+          // Mark enemy as dying
+          if (!nextDying[e.id]) {
+            nextDying[e.id] = Date.now()
           }
-          // Move towards player
-          const dx = playerPos.x - p.x, dy = playerPos.y - p.y, d = Math.hypot(dx,dy)||1
-          const newPos = { x: p.x + dx/d*0.3, y: p.y + dy/d*0.3 }
-          
-          // Calculate current enemy radius
-          let currentEnemyRadius = 12
-          if (e.type === 'melee') {
-            currentEnemyRadius = 12 + e.level * 0.8
-          } else if (e.type === 'ranged') {
-            currentEnemyRadius = 10 + e.level * 0.6
-          } else {
-            currentEnemyRadius = 14 + e.level * 1.0
-          }
-          
-          // Check collision with player (player radius 16)
-          if (!checkCollision(newPos, playerPos, currentEnemyRadius + 2, 18)) {
-            // Check collision with other enemies
-            let canMove = true
-            state.enemies.forEach(otherE => {
-              if (otherE.id !== e.id) {
-                const otherPos = next[otherE.id]
-                if (otherPos) {
-                  // Calculate other enemy radius
-                  let otherEnemyRadius = 12
-                  if (otherE.type === 'melee') {
-                    otherEnemyRadius = 12 + otherE.level * 0.8
-                  } else if (otherE.type === 'ranged') {
-                    otherEnemyRadius = 10 + otherE.level * 0.6
-                  } else {
-                    otherEnemyRadius = 14 + otherE.level * 1.0
-                  }
-                  
-                  if (checkCollision(newPos, otherPos, currentEnemyRadius + 1, otherEnemyRadius + 1)) {
-                    canMove = false
-                  }
-                }
-              }
-            })
-            if (canMove) {
-              next[e.id] = newPos
-            }
-          }
-        })
-        return next
-      })
-
-      // Update projectiles and check for impacts
-      setProjectiles(prev => {
-        const updated = prev.map(p => ({ ...p, x: p.x + p.vx, y: p.y + p.vy, life: p.life - dt }))
+          return
+        }
+        // Move towards player
+        const dx = newPlayerPos.x - p.x, dy = newPlayerPos.y - p.y, d = Math.hypot(dx,dy)||1
+        const calculatedPos = { x: p.x + dx/d*0.3, y: p.y + dy/d*0.3 }
         
-        // Check for projectile-enemy collisions
-        const remaining = updated.filter(p => {
-          if (p.life <= 0) return false
-          
-          // Check collision with enemies
-          let hit = false
-          state.enemies.forEach(e => {
-            const enemyPos = enemyPositions[e.id]
-            if (enemyPos && !hit) {
-              let enemyRadius = 12
-              if (e.type === 'melee') {
-                enemyRadius = 12 + e.level * 0.8
-              } else if (e.type === 'ranged') {
-                enemyRadius = 10 + e.level * 0.6
-              } else {
-                enemyRadius = 14 + e.level * 1.0
-              }
-              
-              if (checkCollision({x: p.x, y: p.y}, enemyPos, p.radius, enemyRadius)) {
-                // Create impact effect
-                setEffects(s => [...s, { 
-                  kind: 'impact', 
-                  x: p.x, 
-                  y: p.y, 
-                  t: Date.now(), 
-                  ttl: 300, 
-                  color: p.color,
-                  size: p.size * 2
-                }])
-                hit = true
+        // Calculate current enemy radius
+        let currentEnemyRadius = 12
+        if (e.type === 'melee') {
+          currentEnemyRadius = 12 + e.level * 0.8
+        } else if (e.type === 'ranged') {
+          currentEnemyRadius = 10 + e.level * 0.6
+        } else {
+          currentEnemyRadius = 14 + e.level * 1.0
+        }
+        
+        // Check collision with player (player radius 16)
+        if (!checkCollision(calculatedPos, newPlayerPos, currentEnemyRadius + 2, 18)) {
+          // Check collision with other enemies
+          let canMove = true
+          state.enemies.forEach(otherE => {
+            if (otherE.id !== e.id) {
+              const otherPos = nextEnemyPositions[otherE.id]
+              if (otherPos) {
+                // Calculate other enemy radius
+                let otherEnemyRadius = 12
+                if (otherE.type === 'melee') {
+                  otherEnemyRadius = 12 + otherE.level * 0.8
+                } else if (otherE.type === 'ranged') {
+                  otherEnemyRadius = 10 + otherE.level * 0.6
+                } else {
+                  otherEnemyRadius = 14 + otherE.level * 1.0
+                }
+                
+                if (checkCollision(calculatedPos, otherPos, currentEnemyRadius + 1, otherEnemyRadius + 1)) {
+                  canMove = false
+                }
               }
             }
           })
-          
-          return !hit
+          if (canMove) {
+            nextEnemyPositions[e.id] = calculatedPos
+          }
+        }
+      })
+      newEnemyPositions = nextEnemyPositions
+      newDying = nextDying
+
+      // Update projectiles and check for impacts
+      const updatedProjectiles = projectiles.map(p => ({ ...p, x: p.x + p.vx, y: p.y + p.vy, life: p.life - dt }))
+      const nextEffects = [...effects]
+      
+      // Check for projectile-enemy collisions
+      const remainingProjectiles = updatedProjectiles.filter(p => {
+        if (p.life <= 0) return false
+        
+        // Check collision with enemies
+        let hit = false
+        state.enemies.forEach(e => {
+          const enemyPos = newEnemyPositions[e.id]
+          if (enemyPos && !hit) {
+            let enemyRadius = 12
+            if (e.type === 'melee') {
+              enemyRadius = 12 + e.level * 0.8
+            } else if (e.type === 'ranged') {
+              enemyRadius = 10 + e.level * 0.6
+            } else {
+              enemyRadius = 14 + e.level * 1.0
+            }
+            
+            if (checkCollision({x: p.x, y: p.y}, enemyPos, p.radius, enemyRadius)) {
+              // Create impact effect
+              nextEffects.push({ 
+                kind: 'impact', 
+                x: p.x, 
+                y: p.y, 
+                t: Date.now(), 
+                ttl: 300, 
+                color: p.color,
+                size: p.size * 2
+              })
+              hit = true
+            }
+          }
         })
         
-        return remaining
+        return !hit
       })
+      
+      newProjectiles = remainingProjectiles
+      newEffects = nextEffects.filter(e => (Date.now() - e.t) < e.ttl)
 
-      // Update effects
-      setEffects(prev => prev.filter(e => (Date.now() - e.t) < e.ttl))
+      // Store calculated values in animation state ref
+      animationStateRef.current.calculatedPlayerPos = newPlayerPos
+      animationStateRef.current.calculatedEnemyPositions = newEnemyPositions
+      animationStateRef.current.calculatedProjectiles = newProjectiles
+      animationStateRef.current.calculatedEffects = newEffects
+      animationStateRef.current.calculatedDying = newDying
+      animationStateRef.current.calculatedCamera = newCamera
 
       raf = requestAnimationFrame(frame)
     }
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
-  }, [state.enemies, enemyPositions, playerPos])
+  }, [state.enemies, state.player, state.log, whirlwindState, playerPos, enemyPositions, camera, projectiles, effects, dying])
 
-  function draw() {
+  // Separate effect to update state at a lower frequency
+  useEffect(() => {
+    const updateState = () => {
+      const animState = animationStateRef.current
+      if (animState.calculatedPlayerPos) {
+        setPlayerPos(animState.calculatedPlayerPos)
+        actions.updatePlayerPosition(animState.calculatedPlayerPos)
+      }
+      if (animState.calculatedEnemyPositions) {
+        setEnemyPositions(animState.calculatedEnemyPositions)
+      }
+      if (animState.calculatedProjectiles) {
+        setProjectiles(animState.calculatedProjectiles)
+      }
+      if (animState.calculatedEffects) {
+        setEffects(animState.calculatedEffects)
+      }
+      if (animState.calculatedDying) {
+        setDying(animState.calculatedDying)
+      }
+      if (animState.calculatedCamera) {
+        setCamera(animState.calculatedCamera)
+      }
+    }
+
+    const interval = setInterval(updateState, 16) // ~60fps for state updates
+    return () => clearInterval(interval)
+  }, [])
+
+  const draw = useCallback(() => {
+    const now = performance.now()
+    if (now - lastFrameTime.current < frameInterval) {
+      return // Skip frame to maintain target FPS
+    }
+    lastFrameTime.current = now
+
+    // Reset pool index for each frame
+    poolIndex = 0
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
+    // Optimize canvas clearing and background drawing
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#071024';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1049,7 +1134,7 @@ export default function GameCanvas() {
         ctx.restore();
       }
     });
-  }
+  }, [state.enemies, enemyPositions, playerPos, projectiles, effects, dying, camera, idleAnimation, whirlwindState, worldToScreen])
 
   // Helper functions
   function drawHpBar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, hp: number, max: number, alpha: number) {
@@ -1075,10 +1160,16 @@ export default function GameCanvas() {
     ctx.fillText(t, x, y);
   }
 
-  // Call draw function
+  // Call draw function with animation frame for smooth rendering
   useEffect(() => {
-    draw();
-  }, [enemyPositions, playerPos, projectiles, effects, state.enemies, dying])
+    let animationId: number
+    const animate = () => {
+      draw()
+      animationId = requestAnimationFrame(animate)
+    }
+    animationId = requestAnimationFrame(animate)
+    return () => cancelAnimationFrame(animationId)
+  }, [draw])
 
   return (
     <div className="game-canvas-container">
@@ -1090,4 +1181,6 @@ export default function GameCanvas() {
       />
     </div>
   )
-}
+})
+
+export default GameCanvas

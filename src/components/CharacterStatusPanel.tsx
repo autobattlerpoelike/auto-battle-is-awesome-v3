@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo, useCallback } from 'react'
 import { useGame } from '../systems/gameContext'
 
 // Utility functions for rarity and element formatting
@@ -46,51 +46,72 @@ function rarityCrit(rarity: string | undefined): number {
   return critChances[rarity || 'Common'] || 0.05
 }
 
-export default function CharacterStatusPanel() {
+const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
   const { state, actions } = useGame()
   const p = state.player
   const skills = state.skills || {}
   
-  // Calculate derived stats
-  const powerMultiplier = Math.pow(1.05, (skills['power']||0))
-  const attackSpeed = (p.attackSpeed || 1) * (1 + (skills['quick']||0)*0.05)
-  const projectileSpeed = (p.projectileSpeed || 1) * (1 + (skills['arcane']||0)*0.1)
-  const totalDps = (p.baseDps + (p.equipped?.power||0)) * powerMultiplier + (p.dps - p.baseDps)
-  const estimatedDps = (totalDps * attackSpeed).toFixed(1)
-  const legacyCrit = rarityCrit(p.equipped?.rarity) * 100
+  // Memoize expensive calculations
+  const derivedStats = useMemo(() => {
+    const powerMultiplier = Math.pow(1.05, (skills['power']||0))
+    const attackSpeed = (p.attackSpeed || 1) * (1 + (skills['quick']||0)*0.05)
+    const projectileSpeed = (p.projectileSpeed || 1) * (1 + (skills['arcane']||0)*0.1)
+    const totalDps = (p.baseDps + (p.equipped?.power||0)) * powerMultiplier + (p.dps - p.baseDps)
+    const estimatedDps = (totalDps * attackSpeed).toFixed(1)
+    
+    return {
+      powerMultiplier,
+      attackSpeed,
+      projectileSpeed,
+      totalDps,
+      estimatedDps
+    }
+  }, [p.attackSpeed, p.baseDps, p.dps, p.equipped?.power, skills])
   
-  // Calculate total character power (all sources)
-  let equipmentPower = 0
-  if (p.equipment) {
-    Object.values(p.equipment).forEach(equipment => {
-      if (equipment?.baseStats?.damage) {
-        equipmentPower += equipment.baseStats.damage
-      }
-      equipment?.affixes?.forEach(affix => {
-        if (affix.stat === 'damage') {
-          equipmentPower += affix.value
+  // Memoize equipment power calculation
+  const equipmentPower = useMemo(() => {
+    let power = 0
+    if (p.equipment) {
+      Object.values(p.equipment).forEach(equipment => {
+        if (equipment?.baseStats?.damage) {
+          power += equipment.baseStats.damage
         }
+        equipment?.affixes?.forEach(affix => {
+          if (affix.stat === 'damage') {
+            power += affix.value
+          }
+        })
       })
-    })
-  }
-  // Add legacy equipment power
-  if (p.equipped?.power) {
-    equipmentPower += p.equipped.power
-  }
+    }
+    // Add legacy equipment power
+    if (p.equipped?.power) {
+      power += p.equipped.power
+    }
+    return power
+  }, [p.equipment, p.equipped?.power])
   
-  // Calculate total character power including all sources
-  const basePower = p.baseDps || 0
-  const skillPowerBonus = (skills['power'] || 0) * 5 // Each power skill level adds 5% base power
-  const totalPower = Math.floor((basePower + equipmentPower + skillPowerBonus) * powerMultiplier)
+  // Memoize total character power
+  const totalPower = useMemo(() => {
+    const basePower = p.baseDps || 0
+    const skillPowerBonus = (skills['power'] || 0) * 5
+    return Math.floor((basePower + equipmentPower + skillPowerBonus) * derivedStats.powerMultiplier)
+  }, [p.baseDps, skills, equipmentPower, derivedStats.powerMultiplier])
   
-  // Get all combat stats
-  const totalCritChance = ((p.critChance || 0) + rarityCrit(p.equipped?.rarity)) * 100
-  const dodgeChance = (p.dodgeChance || 0) * 100
-  const blockChance = (p.blockChance || 0) * 100
-  const lifeSteal = (p.lifeSteal || 0) * 100
-  const armor = p.armor || 0
-  const healthRegen = (p.healthRegen || 0)
-  const manaRegen = (p.manaRegen || 0)
+  // Memoize combat stats
+  const combatStats = useMemo(() => ({
+    totalCritChance: ((p.critChance || 0) + rarityCrit(p.equipped?.rarity)) * 100,
+    dodgeChance: (p.dodgeChance || 0) * 100,
+    blockChance: (p.blockChance || 0) * 100,
+    lifeSteal: (p.lifeSteal || 0) * 100,
+    armor: p.armor || 0,
+    healthRegen: p.healthRegen || 0,
+    manaRegen: p.manaRegen || 0
+  }), [p.critChance, p.equipped?.rarity, p.dodgeChance, p.blockChance, p.lifeSteal, p.armor, p.healthRegen, p.manaRegen])
+  
+  // Memoize reset callback
+  const handleReset = useCallback(() => {
+    actions.resetAll()
+  }, [actions])
 
   return (
     <div className="h-full flex flex-col bg-gray-900/95 text-white">
@@ -173,19 +194,19 @@ export default function CharacterStatusPanel() {
             </div>
             <div className="flex justify-between">
               <span>Est. DPS:</span>
-              <span className="text-yellow-400">{estimatedDps}</span>
+              <span className="text-yellow-400">{derivedStats.estimatedDps}</span>
             </div>
             <div className="flex justify-between">
               <span>Attack Speed:</span>
-              <span className="text-yellow-300">{attackSpeed.toFixed(1)}x</span>
+              <span className="text-yellow-300">{derivedStats.attackSpeed.toFixed(1)}x</span>
             </div>
             <div className="flex justify-between">
               <span>Crit Chance:</span>
-              <span className="text-red-400">{totalCritChance.toFixed(1)}%</span>
+              <span className="text-red-400">{combatStats.totalCritChance.toFixed(1)}%</span>
             </div>
             <div className="flex justify-between">
               <span>Life Steal:</span>
-              <span className="text-pink-400">{lifeSteal.toFixed(1)}%</span>
+              <span className="text-pink-400">{combatStats.lifeSteal.toFixed(1)}%</span>
             </div>
           </div>
         </div>
@@ -196,27 +217,27 @@ export default function CharacterStatusPanel() {
           <div className="grid grid-cols-2 gap-1 text-xs">
             <div className="flex justify-between">
               <span>Armor:</span>
-              <span className="text-gray-300">{armor.toFixed(1)}</span>
+              <span className="text-gray-300">{combatStats.armor.toFixed(1)}</span>
             </div>
             <div className="flex justify-between">
               <span>Dodge:</span>
-              <span className="text-green-400">{dodgeChance.toFixed(1)}%</span>
+              <span className="text-green-400">{combatStats.dodgeChance.toFixed(1)}%</span>
             </div>
             <div className="flex justify-between">
               <span>Block:</span>
-              <span className="text-blue-400">{blockChance.toFixed(1)}%</span>
+              <span className="text-blue-400">{combatStats.blockChance.toFixed(1)}%</span>
             </div>
             <div className="flex justify-between">
               <span>HP Regen:</span>
-              <span className="text-red-300">{healthRegen.toFixed(1)}/s</span>
+              <span className="text-red-300">{combatStats.healthRegen.toFixed(1)}/s</span>
             </div>
             <div className="flex justify-between">
               <span>MP Regen:</span>
-              <span className="text-blue-300">{manaRegen.toFixed(1)}/s</span>
+              <span className="text-blue-300">{combatStats.manaRegen.toFixed(1)}/s</span>
             </div>
             <div className="flex justify-between">
               <span>Proj Speed:</span>
-              <span className="text-cyan-400">{projectileSpeed.toFixed(1)}x</span>
+              <span className="text-cyan-400">{derivedStats.projectileSpeed.toFixed(1)}x</span>
             </div>
           </div>
         </div>
@@ -285,7 +306,7 @@ export default function CharacterStatusPanel() {
 
         {/* Reset Button */}
         <button 
-          onClick={actions.resetAll}
+          onClick={handleReset}
           className="w-full bg-red-600 hover:bg-red-700 text-white py-1.5 px-3 rounded text-xs font-medium transition-colors"
         >
           🔄 Reset Character
@@ -293,4 +314,6 @@ export default function CharacterStatusPanel() {
       </div>
     </div>
   )
-}
+})
+
+export default CharacterStatusPanel

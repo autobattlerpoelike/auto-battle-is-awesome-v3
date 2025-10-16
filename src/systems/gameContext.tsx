@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useReducer, ReactNode } from 'react'
 import { Player, defaultPlayer, calculatePlayerStats } from './player'
-import { Enemy, spawnEnemyForLevel } from './enemy'
+import { Enemy, EnemyType, spawnEnemyForLevel } from './enemy'
 import { simulateCombatTick } from './combat'
 import { generateLoot } from './loot'
 import { loadSave, saveState } from './save'
@@ -22,6 +22,13 @@ import {
   MAIN_SKILL_GEMS, 
   SUPPORT_GEMS 
 } from './skillGems'
+import { 
+  getActiveCombinations, 
+  getActiveSynergies, 
+  calculateCombinationBonuses,
+  type SkillCombination,
+  type SkillSynergy
+} from './skillCombinations'
 
 // Type definitions
 interface GameState {
@@ -32,11 +39,13 @@ interface GameState {
   skills: Record<string, number>
   autoCombat?: boolean
   playerPosition?: { x: number; y: number }
+  activeCombinations?: SkillCombination[]
+  activeSynergies?: SkillSynergy[]
 }
 
 type GameAction = 
   | { type: 'LOAD'; payload?: any }
-  | { type: 'SPAWN'; payload?: { level?: number; kind?: string } }
+  | { type: 'SPAWN'; payload?: { level?: number; kind?: EnemyType } }
   | { type: 'TICK'; payload?: { enemyId: string } }
   | { type: 'REMOVE'; payload: string }
   | { type: 'EQUIP'; payload: string }
@@ -60,7 +69,7 @@ type GameAction =
   | { type: 'UPDATE_PLAYER_POSITION'; payload: { x: number; y: number } }
 
 interface GameActions {
-  spawnEnemy: (level?: number, kind?: string) => void
+  spawnEnemy: (level?: number, kind?: EnemyType) => void
   simulateTick: (enemyId: string) => void
   removeEnemy: (id: string) => void
   equipItem: (id: string) => void
@@ -103,7 +112,22 @@ const initialState: GameState = {
   enemies: [spawnEnemyForLevel(1)],
   inventory: [],
   log: [],
-  skills: {}
+  skills: {},
+  activeCombinations: [],
+  activeSynergies: []
+}
+
+// Helper function to update skill combinations and synergies
+function updateSkillCombinations(state: GameState): GameState {
+  const equippedSkills = state.player.skillBar.slots.filter(skill => skill !== null)
+  const activeCombinations = getActiveCombinations(equippedSkills)
+  const activeSynergies = getActiveSynergies(equippedSkills)
+  
+  return {
+    ...state,
+    activeCombinations,
+    activeSynergies
+  }
 }
 
 function reducer(state: GameState, action: GameAction): GameState {
@@ -277,15 +301,8 @@ function reducer(state: GameState, action: GameAction): GameState {
       const item = state.inventory.find(i => i.id === itemId)
       if (!item) return state
       
-      // Debug logging
-      console.log('EQUIP action - item:', item)
-      console.log('Item slot:', item.slot)
-      console.log('Item category:', item.category)
-      
       // Handle new equipment system
       if (item.slot && item.category) {
-        console.log('Using new equipment system for slot:', item.slot)
-        
         // Check if player can equip this item
         const canEquipItem = !item.requirements || Object.entries(item.requirements).every(([attr, req]) => {
           const playerAttr = state.player.attributes?.[attr as keyof typeof state.player.attributes] ?? 0
@@ -293,7 +310,6 @@ function reducer(state: GameState, action: GameAction): GameState {
         })
         
         if (!canEquipItem) {
-          console.log('Cannot equip item - requirements not met')
           return state
         }
         
@@ -301,14 +317,11 @@ function reducer(state: GameState, action: GameAction): GameState {
         const newEquipment = { ...state.player.equipment }
         newEquipment[item.slot as EquipmentSlot] = item
         
-        console.log('New equipment state:', newEquipment)
-        
         const player = { ...state.player, equipment: newEquipment }
         const calculatedPlayer = calculatePlayerStats(player)
         saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
         return { ...state, player: calculatedPlayer }
       } else {
-        console.log('Using legacy equipment system')
         // Legacy equipment system fallback
         const player = { ...state.player, equipped: item }
         const calculatedPlayer = calculatePlayerStats(player)
@@ -460,11 +473,12 @@ function reducer(state: GameState, action: GameAction): GameState {
       if (result.success && result.updatedPlayer) {
         const calculatedPlayer = calculatePlayerStats(result.updatedPlayer)
         saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
-        return { 
+        const updatedState = updateSkillCombinations({ 
           ...state, 
           player: calculatedPlayer, 
           log: [result.message, ...state.log].slice(0, 200) 
-        }
+        })
+        return updatedState
       } else {
         return { 
           ...state, 
@@ -478,11 +492,12 @@ function reducer(state: GameState, action: GameAction): GameState {
       if (result.success && result.updatedPlayer) {
         const calculatedPlayer = calculatePlayerStats(result.updatedPlayer)
         saveState({ player: calculatedPlayer, inventory: state.inventory, enemies: state.enemies, skills: state.skills })
-        return { 
+        const updatedState = updateSkillCombinations({ 
           ...state, 
           player: calculatedPlayer, 
           log: [result.message, ...state.log].slice(0, 200) 
-        }
+        })
+        return updatedState
       } else {
         return { 
           ...state, 
@@ -668,7 +683,7 @@ export function GameProvider({ children }: GameProviderProps) {
   }, [state.enemies.length, state.skills])
 
   const actions: GameActions = {
-    spawnEnemy: (level?: number, kind?: string) => dispatch({ type: 'SPAWN', payload: { level, kind } }),
+    spawnEnemy: (level?: number, kind?: EnemyType) => dispatch({ type: 'SPAWN', payload: { level, kind } }),
     simulateTick: (enemyId: string) => dispatch({ type: 'TICK', payload: { enemyId } }),
     removeEnemy: (id: string) => dispatch({ type: 'REMOVE', payload: id }),
     equipItem: (id: string) => dispatch({ type: 'EQUIP', payload: id }),

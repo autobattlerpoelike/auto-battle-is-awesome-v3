@@ -2,7 +2,8 @@ import { DamageType } from './combat'
 import { 
   Equipment, EquipmentSlot, WeaponType, ArmorType, AccessoryType,
   Affix, WEAPON_BASES, ARMOR_BASES, ACCESSORY_BASES,
-  WEAPON_AFFIXES, ARMOR_AFFIXES, ACCESSORY_AFFIXES, RARITIES
+  WEAPON_AFFIXES, ARMOR_AFFIXES, ACCESSORY_AFFIXES, RARITIES,
+  EquipmentStats, Attribute
 } from './equipment'
 
 // Weighted random selection
@@ -145,21 +146,16 @@ function generateEquipmentName(
   damageType?: DamageType,
   affixes: Affix[] = []
 ): string {
-  console.log('generateEquipmentName called with type:', type, 'rarity:', rarity, 'level:', level)
   let baseName = ''
   
   // Get base name from equipment definitions
   if (type in WEAPON_BASES) {
     baseName = WEAPON_BASES[type as WeaponType].name
-    console.log('Found weapon base name:', baseName)
   } else if (type in ARMOR_BASES) {
     baseName = ARMOR_BASES[type as ArmorType].name
-    console.log('Found armor base name:', baseName)
   } else if (type in ACCESSORY_BASES) {
     baseName = ACCESSORY_BASES[type as AccessoryType].name
-    console.log('Found accessory base name:', baseName)
   } else {
-    console.log('No base name found for type:', type)
     baseName = 'Unknown Item' // Fallback name
   }
   
@@ -189,13 +185,12 @@ function generateEquipmentName(
   // Add rarity and level
   const elementText = damageType && damageType !== 'physical' ? ` [${damageType.toUpperCase()}]` : ''
   const finalName = `${rarity} ${baseName}${elementText} (L${level})`
-  console.log('Final generated name:', finalName)
   return finalName
 }
 
 // Calculate equipment value
 function calculateValue(
-  baseStats: any, 
+  baseStats: EquipmentStats, 
   affixes: Affix[], 
   rarity: string, 
   level: number
@@ -228,9 +223,9 @@ export function generateEquipment(level: number, fromBoss: boolean = false): Equ
   const rarity = chooseRarity(level, fromBoss)
   const { category, type } = chooseEquipmentType(level)
   
-  let baseStats: any = {}
+  let baseStats: EquipmentStats = {}
   let slot: EquipmentSlot
-  let requirements: any = {}
+  let requirements: Partial<Record<Attribute, number>> = {}
   let damageType: DamageType | undefined
   
   // Get base equipment data
@@ -258,8 +253,8 @@ export function generateEquipment(level: number, fromBoss: boolean = false): Equ
   const rarityMultiplier = rarityInfo.statMultiplier
   
   Object.keys(baseStats).forEach(stat => {
-    if (typeof baseStats[stat] === 'number') {
-      baseStats[stat] = Math.round(baseStats[stat] * levelMultiplier * rarityMultiplier * 100) / 100
+    if (typeof (baseStats as any)[stat] === 'number') {
+      (baseStats as any)[stat] = Math.round((baseStats as any)[stat] * levelMultiplier * rarityMultiplier * 100) / 100
     }
   })
   
@@ -268,7 +263,6 @@ export function generateEquipment(level: number, fromBoss: boolean = false): Equ
   
   // Generate name
   const name = generateEquipmentName(type, rarity, level, damageType, affixes)
-  console.log('Generated name:', name)
   
   // Calculate value
   const value = calculateValue(baseStats, affixes, rarity, level)
@@ -276,7 +270,7 @@ export function generateEquipment(level: number, fromBoss: boolean = false): Equ
   return {
     id: 'eq_' + Math.random().toString(36).substr(2, 9),
     name,
-    type: type as any,
+    type: type as WeaponType | ArmorType | AccessoryType,
     slot,
     category,
     rarity,

@@ -1,9 +1,10 @@
-import React from 'react'
+import React, { useMemo, useCallback } from 'react'
 import { useGame } from '../systems/gameContext'
-import { EQUIPMENT_SLOTS, getEquipmentColor } from '../systems/equipment'
+import { EQUIPMENT_SLOTS, RARITIES, type EquipmentSlot } from '../systems/equipment'
 import { canEquip } from '../systems/equipmentGenerator'
+import type { DamageType } from '../systems/combat'
 
-function rarityColor(r) {
+function rarityColor(r: string | undefined): string {
   if (!r) return '#9ca3af'
   if (r === 'Common') return '#9ca3af'
   if (r === 'Magic') return '#06b6d4'
@@ -13,9 +14,10 @@ function rarityColor(r) {
   return '#9ca3af'
 }
 
-function elementColor(element) {
+function elementColor(element: DamageType | undefined): string {
   if (!element || element === 'physical') return ''
-  const colors = {
+  const colors: Record<DamageType, string> = {
+    physical: '',
     fire: '#ff6b6b',
     ice: '#74c0fc',
     lightning: '#ffd43b',
@@ -24,9 +26,10 @@ function elementColor(element) {
   return colors[element] || ''
 }
 
-function formatElement(element) {
+function formatElement(element: DamageType | undefined): string {
   if (!element || element === 'physical') return ''
-  const symbols = {
+  const symbols: Record<DamageType, string> = {
+    physical: '',
     fire: '🔥',
     ice: '❄️',
     lightning: '⚡',
@@ -35,37 +38,36 @@ function formatElement(element) {
   return symbols[element] || ''
 }
 
-export default function EquipmentPanel() {
+const EquipmentPanel = React.memo(function EquipmentPanel() {
   const { state, dispatch } = useGame()
   const p = state.player
 
-  // Get equipped item for a specific slot
-  const getEquippedItem = (slotId) => {
-    console.log(`Getting equipped item for slot: ${slotId}`)
-    console.log('Player equipment:', p.equipment)
-    console.log('Player equipped (legacy):', p.equipped)
-    
-    // Check new equipment system first
-    if (p.equipment && p.equipment[slotId]) {
-      console.log(`Found item in slot ${slotId}:`, p.equipment[slotId])
-      return p.equipment[slotId]
-    }
-    
-    // Legacy support: map old equipped item to weapon slot
-    if (p.equipped && slotId === 'weapon') {
-      const itemType = p.equipped.type
-      if (itemType === 'melee' || itemType === 'ranged') {
-        console.log('Using legacy equipped item for weapon slot:', p.equipped)
-        return p.equipped
+  // Memoize equipped items for all slots
+  const equippedItems = useMemo(() => {
+    const items: Record<string, any> = {}
+    EQUIPMENT_SLOTS.forEach(slot => {
+      // Check new equipment system first
+      if (p.equipment && p.equipment[slot.id as EquipmentSlot]) {
+        items[slot.id] = p.equipment[slot.id as EquipmentSlot]
       }
-    }
-    
-    console.log(`No item found for slot: ${slotId}`)
-    return null
-  }
+      // Legacy support: map old equipped item to weapon slot
+      else if (p.equipped && slot.id === 'weapon') {
+        const itemType = p.equipped.type
+        if (itemType === 'melee' || itemType === 'ranged') {
+          items[slot.id] = p.equipped
+        }
+      }
+    })
+    return items
+  }, [p.equipment, p.equipped])
 
-  // Calculate total equipped items
-  const getEquippedCount = () => {
+  // Get equipped item for a specific slot
+  const getEquippedItem = useCallback((slotId: string) => {
+    return equippedItems[slotId] || null
+  }, [equippedItems])
+
+  // Memoize total equipped items count
+  const equippedCount = useMemo(() => {
     let count = 0
     if (p.equipment) {
       count += Object.keys(p.equipment).length
@@ -74,9 +76,14 @@ export default function EquipmentPanel() {
       count += 1 // Legacy equipped item
     }
     return count
-  }
+  }, [p.equipment, p.equipped])
+  
+  // Memoize unequip callback
+  const handleUnequip = useCallback((slotId: string) => {
+    dispatch({ type: 'UNEQUIP', payload: slotId })
+  }, [dispatch])
 
-  const renderEquipmentSlot = (slot) => {
+  const renderEquipmentSlot = (slot: any) => {
     const equippedItem = getEquippedItem(slot.id)
     
     return (
@@ -96,7 +103,7 @@ export default function EquipmentPanel() {
           onContextMenu={(e) => {
             if (equippedItem) {
               e.preventDefault()
-              dispatch({ type: 'UNEQUIP', payload: slot.id })
+              handleUnequip(slot.id)
             }
           }}
         >
@@ -188,7 +195,7 @@ export default function EquipmentPanel() {
                     <div className="text-xs text-gray-400 mb-1">Base Stats:</div>
                     {Object.entries(equippedItem.baseStats).map(([stat, value]) => (
                       <div key={stat} className="text-xs">
-                        {stat}: +{typeof value === 'number' ? Math.round(value * 100) / 100 : value}
+                        {stat}: +{typeof value === 'number' ? Math.round((value as number) * 100) / 100 : String(value)}
                       </div>
                     ))}
                   </div>
@@ -206,8 +213,8 @@ export default function EquipmentPanel() {
                   <div className="mt-1 pt-1 border-t border-gray-700">
                     <div className="text-xs text-gray-400 mb-1">Requirements:</div>
                     {Object.entries(equippedItem.requirements).map(([attr, value]) => {
-                      const playerValue = p.attributes?.[attr] || 0
-                      const canMeet = playerValue >= value
+                      const playerValue = (p.attributes as any)?.[attr] || 0
+                      const canMeet = playerValue >= (value as number)
                       return (
                         <div key={attr} className={`text-xs ${canMeet ? 'text-green-400' : 'text-red-400'}`}>
                           {attr}: {value} ({playerValue})
@@ -221,7 +228,7 @@ export default function EquipmentPanel() {
                 {equippedItem.affixes && equippedItem.affixes.length > 0 && (
                   <div className="mt-1 pt-1 border-t border-gray-700">
                     <div className="text-xs text-gray-400 mb-1">Affixes:</div>
-                    {equippedItem.affixes.map((affix, i) => (
+                    {equippedItem.affixes.map((affix: any, i: number) => (
                       <div key={i} className="text-blue-300 text-xs">
                         {affix.name}: +{Math.round(affix.value * 100) / 100}
                       </div>
@@ -233,7 +240,7 @@ export default function EquipmentPanel() {
                 {equippedItem.extras && equippedItem.extras.length > 0 && (
                   <div className="mt-1 pt-1 border-t border-gray-700">
                     <div className="text-xs text-gray-400 mb-1">Bonuses:</div>
-                    {equippedItem.extras.map((e, i) => (
+                    {equippedItem.extras.map((e: any, i: number) => (
                       <div key={i} className="text-blue-300 text-xs">
                         {e.key}: +{e.val}
                       </div>
@@ -266,13 +273,14 @@ export default function EquipmentPanel() {
       <div className="p-4 border-t border-gray-600">
         <div className="text-center text-sm text-gray-400">
           {(() => {
-            const count = getEquippedCount()
-            if (count === 0) return <span>No equipment</span>
-            if (count === 1) return <span>1 item equipped</span>
-            return <span>{count} items equipped</span>
+            if (equippedCount === 0) return <span>No equipment</span>
+            if (equippedCount === 1) return <span>1 item equipped</span>
+            return <span>{equippedCount} items equipped</span>
           })()}
         </div>
       </div>
     </div>
   )
-}
+})
+
+export default EquipmentPanel
