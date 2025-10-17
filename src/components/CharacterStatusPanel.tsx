@@ -89,25 +89,27 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
     value, 
     color, 
     statType, 
-    suffix = '' 
+    suffix = ''
   }: { 
     label: string
     value: number | string
     color: string
     statType: string
     suffix?: string
-  }) => (
-    <div 
-      className="flex justify-between cursor-help hover:bg-gray-700/30 px-1 py-0.5 rounded transition-colors"
-      onMouseEnter={(e) => handleStatHover(e, label, statType)}
-      onMouseLeave={handleStatLeave}
-    >
-      <span>{label}:</span>
-      <span className={color}>
-        {typeof value === 'number' ? value.toFixed(2) : value}{suffix}
-      </span>
-    </div>
-  ), [handleStatHover, handleStatLeave])
+  }) => {
+    return (
+      <div 
+        className="flex justify-between cursor-help hover:bg-gray-700/30 px-1 py-0.5 rounded transition-colors"
+        onMouseEnter={(e) => handleStatHover(e, label, statType)}
+        onMouseLeave={handleStatLeave}
+      >
+        <span>{label}:</span>
+        <span className={color}>
+          {typeof value === 'number' ? value.toFixed(2) : value}{suffix}
+        </span>
+      </div>
+    )
+  }, [handleStatHover, handleStatLeave])
 
   // Memoize expensive calculations
   const derivedStats = useMemo(() => {
@@ -329,6 +331,57 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
             <div className="flex justify-between">
               <span>Proj Speed:</span>
               <span className="text-cyan-400">{derivedStats.projectileSpeed.toFixed(2)}x</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Skill Tree Bonuses */}
+        <div className="bg-gray-800/50 p-2 rounded border border-gray-700">
+          <h3 className="text-xs font-semibold text-yellow-300 mb-1">🌟 Skill Tree Bonuses</h3>
+          <div className="grid grid-cols-2 gap-1 text-xs">
+            <div className="flex justify-between">
+              <span>💪 Strength:</span>
+              <span className="text-red-400">+{skills['strength'] || 0} damage</span>
+            </div>
+            <div className="flex justify-between">
+              <span>🎯 Precision:</span>
+              <span className="text-red-400">+{skills['precision'] || 0}% crit</span>
+            </div>
+            <div className="flex justify-between">
+              <span>⚡ Agility:</span>
+              <span className="text-green-400">+{skills['agility'] || 0}% dodge</span>
+            </div>
+            <div className="flex justify-between">
+              <span>🛡️ Resilience:</span>
+              <span className="text-gray-300">+{skills['resilience'] || 0} armor</span>
+            </div>
+            <div className="flex justify-between">
+              <span>❤️ Endurance:</span>
+              <span className="text-red-300">+{(skills['endurance'] || 0) * 10} HP</span>
+            </div>
+            <div className="flex justify-between">
+              <span>⚡ Power:</span>
+              <span className="text-orange-400">+{((skills['power'] || 0) * 5).toFixed(0)}% dmg</span>
+            </div>
+            <div className="flex justify-between">
+              <span>🏃 Quick:</span>
+              <span className="text-yellow-300">+{((skills['quick'] || 0) * 5).toFixed(0)}% speed</span>
+            </div>
+            <div className="flex justify-between">
+              <span>🔮 Arcane:</span>
+              <span className="text-cyan-400">+{((skills['arcane'] || 0) * 10).toFixed(0)}% proj</span>
+            </div>
+            <div className="flex justify-between">
+              <span>💰 Fortune:</span>
+              <span className="text-yellow-400">+{((skills['fortune'] || 0) * 10).toFixed(0)}% gold/loot</span>
+            </div>
+            <div className="flex justify-between">
+              <span>🪙 Gold Find:</span>
+              <span className="text-yellow-300">+{((p.calculatedStats?.goldFind || 0) * 100).toFixed(0)}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span>🔍 Magic Find:</span>
+              <span className="text-purple-400">+{((p.calculatedStats?.magicFind || 0) * 100).toFixed(0)}%</span>
             </div>
           </div>
         </div>
