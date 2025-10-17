@@ -278,7 +278,7 @@ const InventoryItem = memo(({
         isEquipped 
           ? 'border-green-500 bg-green-900/20 shadow-lg shadow-green-500/20' 
           : 'border-gray-600 hover:border-gray-400 hover:bg-gray-600/50'
-      } ${viewMode === 'grid' ? 'p-3 h-auto min-h-[200px] max-h-[300px] overflow-hidden' : 'p-4'}`}
+      } ${viewMode === 'grid' ? 'p-3 h-auto min-h-[200px]' : 'p-4'}`}
       onMouseEnter={(e) => onHover?.(e, item)}
       onMouseLeave={onLeave}
       onClick={(e) => onClick?.(e, item)}
