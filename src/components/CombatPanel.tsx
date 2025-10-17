@@ -66,9 +66,9 @@ export default function CombatPanel() {
           <div>XP: {player.xp}/{player.nextLevelXp}</div>
           <div>Gold: {player.gold}</div>
           {player.armor && player.armor > 0 && <div>Armor: {player.armor}</div>}
-          {player.critChance && player.critChance > 0 && <div>Crit: {(player.critChance * 100).toFixed(1)}%</div>}
-          {player.dodgeChance && player.dodgeChance > 0 && <div>Dodge: {(player.dodgeChance * 100).toFixed(1)}%</div>}
-          {player.lifeSteal && player.lifeSteal > 0 && <div>Life Steal: {(player.lifeSteal * 100).toFixed(1)}%</div>}
+          {player.critChance && player.critChance > 0 && <div>Crit: {(player.critChance * 100).toFixed(2)}%</div>}
+        {player.dodgeChance && player.dodgeChance > 0 && <div>Dodge: {(player.dodgeChance * 100).toFixed(2)}%</div>}
+        {player.lifeSteal && player.lifeSteal > 0 && <div>Life Steal: {(player.lifeSteal * 100).toFixed(2)}%</div>}
           {player.equipped && player.equipped.damageType && player.equipped.damageType !== 'physical' && (
             <div>Element: {formatDamageType(player.equipped.damageType)}</div>
           )}

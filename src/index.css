@@ -273,11 +273,20 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  position: relative;
+  overflow: hidden;
 }
 
 .skill-card:hover, .support-card:hover {
   border-color: var(--accent-primary);
   box-shadow: 0 4px 12px var(--glow-color);
+  transform: translateY(-2px);
+}
+
+.skill-card.hovered, .support-card.hovered {
+  border-color: var(--accent-secondary);
+  box-shadow: 0 6px 16px var(--glow-color);
+  transform: translateY(-3px);
 }
 
 .skill-card.selected, .support-card.selected {
@@ -294,6 +303,15 @@ body {
 .skill-card.locked:hover, .support-card.locked:hover {
   border-color: var(--text-muted);
   box-shadow: none;
+  transform: none;
+}
+
+/* Enhanced Header Styles */
+.skill-header, .support-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
 }
 
 .skill-icon, .support-icon {
@@ -308,10 +326,319 @@ body {
   border: 1px solid var(--border-color);
 }
 
-.skill-card-header, .support-card-header {
+.equipped-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: var(--bg-primary);
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 255, 255, 0.3);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Enhanced Stats Preview */
+.skill-stats-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-primary);
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.stat-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.stat-value {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+}
+
+/* Support Gems Preview */
+.support-count {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 4px;
+}
+
+.support-gems-preview {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.mini-support-icon {
+  font-size: 0.8rem;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.mini-support-more {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+/* Support Modifiers */
+.support-modifiers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-primary);
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.modifier-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.modifier-value {
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+}
+
+.modifier-value.positive {
+  color: var(--accent-tertiary);
+}
+
+.modifier-value.negative {
+  color: var(--accent-danger);
+}
+
+.modifier-type {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  text-transform: capitalize;
+}
+
+/* Compatibility Indicators */
+.compatibility-overlay {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+}
+
+.compatibility-indicator {
+  font-size: 1.2rem;
+  padding: 4px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  display: inline-block;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.compatibility-indicator.compatible {
+  border-color: var(--accent-tertiary);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.compatibility-indicator.incompatible {
+  border-color: var(--accent-danger);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.compatibility-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  padding: 6px 8px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.compatibility-label {
+  color: var(--text-secondary);
+}
+
+.compatibility-count {
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+/* Enhanced Tag Styles */
+.skill-tag, .support-tag {
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  border: 1px solid var(--border-color);
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.skill-tag:hover, .support-tag:hover {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  transform: scale(1.05);
+}
+
+/* Tag Type Colors */
+.tag-attack {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.tag-spell {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.tag-aoe {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.tag-projectile {
+  border-color: #10b981;
+  color: #10b981;
+}
+
+.tag-fire {
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+.tag-cold {
+  border-color: #06b6d4;
+  color: #06b6d4;
+}
+
+.tag-lightning {
+  border-color: #eab308;
+  color: #eab308;
+}
+
+.tag-physical {
+  border-color: #6b7280;
+  color: #6b7280;
+}
+
+.tag-chaos {
+  border-color: #8b5cf6;
+  color: #8b5cf6;
+}
+
+.tag-duration {
+  border-color: #84cc16;
+  color: #84cc16;
+}
+
+.tag-minion {
+  border-color: #a855f7;
+  color: #a855f7;
+}
+
+.tag-support {
+  border-color: #f97316;
+  color: #f97316;
+}
+
+/* Enhanced Action Buttons */
+.skill-actions, .support-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.unlock-btn, .level-up-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.unlock-btn {
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  color: var(--bg-primary);
+}
+
+.unlock-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 255, 255, 0.3);
+}
+
+.unlock-btn:disabled {
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.level-up-btn {
+  background: linear-gradient(135deg, var(--accent-tertiary), #22c55e);
+  color: var(--bg-primary);
+}
+
+.level-up-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+/* Skill Meta Information */
+.skill-meta, .support-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.skill-level, .support-level,
+.skill-quality, .support-quality,
+.skill-rarity, .support-rarity {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+}
+
+.skill-quality, .support-quality {
+  color: var(--accent-tertiary);
+  border-color: var(--accent-tertiary);
+}
+
+.skill-rarity, .support-rarity {
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
 .skill-info, .support-info {

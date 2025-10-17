@@ -17,6 +17,7 @@ import './utils/performanceTest' // Import performance testing utilities
 
 export default function App() {
   const [activeModal, setActiveModal] = useState<string | null>(null)
+  const [isSkillGemPanelVisible, setIsSkillGemPanelVisible] = useState(false)
 
   const openModal = (modalType: string) => {
     setActiveModal(modalType)
@@ -34,8 +35,7 @@ export default function App() {
         return <CharacterStatusPanel />
       case 'skills':
         return <SkillTreePanel />
-      case 'skillgems':
-        return <SkillGemPanel isOpen={true} onClose={closeModal} />
+
       case 'combinations':
         return <SkillCombinationsPanel />
       case 'inventory':
@@ -57,8 +57,7 @@ export default function App() {
         return 'Character Status'
       case 'skills':
         return 'Skill Tree'
-      case 'skillgems':
-        return 'Skill Gems'
+
       case 'combinations':
         return 'Skill Combinations'
       case 'inventory':
@@ -113,6 +112,24 @@ export default function App() {
       >
         {renderModalContent()}
       </Modal>
+      
+      {/* Skill Gem Panel Toggle Button */}
+      {!isSkillGemPanelVisible && (
+        <button
+          onClick={() => setIsSkillGemPanelVisible(true)}
+          className="fixed bottom-20 right-4 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-medium shadow-lg z-50"
+        >
+          💎 Skill Gems
+        </button>
+      )}
+      
+      {/* Skill Gem Panel */}
+      {isSkillGemPanelVisible && (
+        <SkillGemPanel 
+          isOpen={true} 
+          onClose={() => setIsSkillGemPanelVisible(false)} 
+        />
+      )}
       
       <PerformanceMonitor />
     </div>

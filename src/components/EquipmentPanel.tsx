@@ -96,8 +96,8 @@ const EquipmentSlotComponent = memo(({
               className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-900/80"
               style={{ color: rarityColor(equippedItem.rarity) }}
             >
-              {equippedItem.power ? `+${equippedItem.power}` : 
-               equippedItem.baseStats?.damage ? `+${Math.floor(equippedItem.baseStats.damage)}` :
+              {equippedItem.power ? `+${equippedItem.power.toFixed(2)}` : 
+               equippedItem.baseStats?.damage ? `+${equippedItem.baseStats.damage.toFixed(2)}` :
                '+?'}
             </div>
             
@@ -155,7 +155,7 @@ const EquipmentSlotComponent = memo(({
               {/* Legacy power display */}
               {equippedItem.power && (
                 <div className="text-orange-400 font-medium">
-                  Power: +{equippedItem.power}
+                  Power: +{equippedItem.power.toFixed(2)}
                 </div>
               )}
               
@@ -165,7 +165,7 @@ const EquipmentSlotComponent = memo(({
                   <div className="text-xs text-gray-400 mb-1">Base Stats:</div>
                   {Object.entries(equippedItem.baseStats).map(([stat, value]) => (
                     <div key={stat} className="text-xs">
-                      {stat}: +{typeof value === 'number' ? Math.round((value as number) * 100) / 100 : String(value)}
+                      {stat}: +{typeof value === 'number' ? (value as number).toFixed(2) : String(value)}
                     </div>
                   ))}
                 </div>
@@ -200,7 +200,7 @@ const EquipmentSlotComponent = memo(({
                   <div className="text-xs text-gray-400 mb-1">Affixes:</div>
                   {equippedItem.affixes.map((affix: any, i: number) => (
                     <div key={i} className="text-blue-300 text-xs">
-                      {affix.name}: +{Math.round(affix.value * 100) / 100}
+                      {affix.name}: +{affix.value.toFixed(2)}
                     </div>
                   ))}
                 </div>

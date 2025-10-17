@@ -57,7 +57,7 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
     const attackSpeed = (p.attackSpeed || 1) * (1 + (skills['quick']||0)*0.05)
     const projectileSpeed = (p.projectileSpeed || 1) * (1 + (skills['arcane']||0)*0.1)
     const totalDps = (p.baseDps + (p.equipped?.power||0)) * powerMultiplier + (p.dps - p.baseDps)
-    const estimatedDps = (totalDps * attackSpeed).toFixed(1)
+    const estimatedDps = (totalDps * attackSpeed).toFixed(2)
     
     return {
       powerMultiplier,
@@ -136,11 +136,11 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
             </div>
             <div className="flex justify-between">
               <span>HP:</span>
-              <span className="text-red-400">{Math.floor(p.hp)}/{Math.floor(p.maxHp)}</span>
+              <span className="text-red-400">{p.hp.toFixed(2)}/{p.maxHp.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span>Mana:</span>
-              <span className="text-blue-400">{Math.floor(p.mana || 0)}/{Math.floor(p.maxMana || 50)}</span>
+              <span className="text-blue-400">{(p.mana || 0).toFixed(2)}/{(p.maxMana || 50).toFixed(2)}</span>
             </div>
           </div>
         </div>
@@ -182,15 +182,15 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
           <div className="grid grid-cols-2 gap-1 text-xs">
             <div className="flex justify-between">
               <span>Base DPS:</span>
-              <span className="text-orange-400">{p.baseDps}</span>
+              <span className="text-orange-400">{(p.baseDps || 0).toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span>Total DPS:</span>
-              <span className="text-orange-300">{p.dps}</span>
+              <span className="text-orange-300">{(p.dps || 0).toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span>Total Power:</span>
-              <span className="text-purple-400">{totalPower}</span>
+              <span className="text-purple-400">{totalPower.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span>Est. DPS:</span>
@@ -198,15 +198,15 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
             </div>
             <div className="flex justify-between">
               <span>Attack Speed:</span>
-              <span className="text-yellow-300">{derivedStats.attackSpeed.toFixed(1)}x</span>
+              <span className="text-yellow-300">{derivedStats.attackSpeed.toFixed(2)}x</span>
             </div>
             <div className="flex justify-between">
               <span>Crit Chance:</span>
-              <span className="text-red-400">{combatStats.totalCritChance.toFixed(1)}%</span>
+              <span className="text-red-400">{combatStats.totalCritChance.toFixed(2)}%</span>
             </div>
             <div className="flex justify-between">
               <span>Life Steal:</span>
-              <span className="text-pink-400">{combatStats.lifeSteal.toFixed(1)}%</span>
+              <span className="text-pink-400">{combatStats.lifeSteal.toFixed(2)}%</span>
             </div>
           </div>
         </div>
@@ -217,27 +217,27 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
           <div className="grid grid-cols-2 gap-1 text-xs">
             <div className="flex justify-between">
               <span>Armor:</span>
-              <span className="text-gray-300">{combatStats.armor.toFixed(1)}</span>
+              <span className="text-gray-300">{combatStats.armor.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span>Dodge:</span>
-              <span className="text-green-400">{combatStats.dodgeChance.toFixed(1)}%</span>
+              <span className="text-green-400">{combatStats.dodgeChance.toFixed(2)}%</span>
             </div>
             <div className="flex justify-between">
               <span>Block:</span>
-              <span className="text-blue-400">{combatStats.blockChance.toFixed(1)}%</span>
+              <span className="text-blue-400">{combatStats.blockChance.toFixed(2)}%</span>
             </div>
             <div className="flex justify-between">
               <span>HP Regen:</span>
-              <span className="text-red-300">{combatStats.healthRegen.toFixed(1)}/s</span>
+              <span className="text-red-300">{combatStats.healthRegen.toFixed(2)}/s</span>
             </div>
             <div className="flex justify-between">
               <span>MP Regen:</span>
-              <span className="text-blue-300">{combatStats.manaRegen.toFixed(1)}/s</span>
+              <span className="text-blue-300">{combatStats.manaRegen.toFixed(2)}/s</span>
             </div>
             <div className="flex justify-between">
               <span>Proj Speed:</span>
-              <span className="text-cyan-400">{derivedStats.projectileSpeed.toFixed(1)}x</span>
+              <span className="text-cyan-400">{derivedStats.projectileSpeed.toFixed(2)}x</span>
             </div>
           </div>
         </div>

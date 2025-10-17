@@ -35,12 +35,6 @@ export default function Header({ onOpenModal }: HeaderProps) {
               🎯 Skills
             </button>
             <button 
-              onClick={() => onOpenModal('skillgems')}
-              className="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-800/60 border border-purple-600/50 text-purple-300 rounded-md transition-all duration-200 text-sm font-medium hover:shadow-lg hover:shadow-purple-500/20"
-            >
-              💎 Skill Gems
-            </button>
-            <button 
               onClick={() => onOpenModal('combinations')}
               className="px-3 py-1.5 bg-pink-900/50 hover:bg-pink-800/60 border border-pink-600/50 text-pink-300 rounded-md transition-all duration-200 text-sm font-medium hover:shadow-lg hover:shadow-pink-500/20"
             >
@@ -58,19 +52,13 @@ export default function Header({ onOpenModal }: HeaderProps) {
             >
               🎒 Inventory
             </button>
-            <button 
-              onClick={() => onOpenModal('log')}
-              className="px-3 py-1.5 bg-orange-900/50 hover:bg-orange-800/60 border border-orange-600/50 text-orange-300 rounded-md transition-all duration-200 text-sm font-medium hover:shadow-lg hover:shadow-orange-500/20"
-            >
-              📜 Combat Log
-            </button>
           </div>
           
           {/* Stats Section */}
           <div className="header-stats flex flex-wrap gap-2 mt-1">
             <div className="bg-yellow-900/30 border border-yellow-600/40 text-yellow-300 rounded-md px-3 py-1.5 flex items-center space-x-2 text-sm">
               <span>💰</span>
-              <span>{Math.floor(p.gold).toLocaleString()}</span>
+              <span>{p.gold.toFixed(2)}</span>
             </div>
             <div className="bg-red-900/30 border border-red-600/40 text-red-300 rounded-md px-3 py-1.5 flex items-center space-x-2 text-sm">
               <span>👹</span>
@@ -78,11 +66,11 @@ export default function Header({ onOpenModal }: HeaderProps) {
             </div>
             <div className="bg-orange-900/30 border border-orange-600/40 text-orange-300 rounded-md px-3 py-1.5 flex items-center space-x-2 text-sm">
               <span>⚔️</span>
-              <span>{(totalDps).toFixed(1)}</span>
+              <span>{(totalDps).toFixed(2)}</span>
             </div>
             <div className="bg-cyan-900/30 border border-cyan-600/40 text-cyan-300 rounded-md px-3 py-1.5 flex items-center space-x-2 text-sm">
               <span>⚡</span>
-              <span>{attackSpeed.toFixed(1)}/s</span>
+              <span>{attackSpeed.toFixed(2)}/s</span>
             </div>
             <div className="bg-purple-900/30 border border-purple-600/40 text-purple-300 rounded-md px-3 py-1.5 flex items-center space-x-2 text-sm">
               <span>🎯</span>
@@ -94,7 +82,7 @@ export default function Header({ onOpenModal }: HeaderProps) {
                 <div className="bg-blue-800/50 rounded-full h-2 overflow-hidden">
                   <div 
                     className="bg-blue-400 h-full transition-all duration-300"
-                    style={{ width: `${(Math.floor(p.xp) / p.nextLevelXp) * 100}%` }}
+                    style={{ width: `${(p.xp / p.nextLevelXp) * 100}%` }}
                   />
                 </div>
               </div>

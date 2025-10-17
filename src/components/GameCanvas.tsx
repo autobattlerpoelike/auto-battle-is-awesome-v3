@@ -190,8 +190,35 @@ const GameCanvas = React.memo(function GameCanvas() {
       }
 
       if (pos) {
-        const text = (critFlag === 'crit') ? `-${dmg}!!!` : `-${dmg}`
-        setEffects(s => [...s, { kind:'damage', x: pos.x + (Math.random()-0.5)*10, y: pos.y - 10 + (Math.random()-0.5)*6, t: Date.now(), ttl: 1600, text, crit: critFlag === 'crit', size: Math.min(28, 10 + Math.floor(dmg/2)), color: critFlag === 'crit' ? '#f59e0b' : '#ff6b6b' }])
+        // Format damage to 2 decimal places
+        const formattedDmg = dmg.toFixed(2)
+        const text = (critFlag === 'crit') ? `-${formattedDmg} CRIT!` : `-${formattedDmg}`
+        const isCritical = critFlag === 'crit'
+        
+        setEffects(s => [...s, { 
+          kind: isCritical ? 'critical_damage' : 'damage', 
+          x: pos.x + (Math.random()-0.5)*10, 
+          y: pos.y - 10 + (Math.random()-0.5)*6, 
+          t: Date.now(), 
+          ttl: isCritical ? 2000 : 1600, 
+          text, 
+          crit: isCritical, 
+          size: Math.min(isCritical ? 32 : 28, (isCritical ? 14 : 10) + Math.floor(dmg/2)), 
+          color: isCritical ? '#ff0066' : '#ff6b6b' 
+        }])
+        
+        // Add critical hit burst effect
+        if (isCritical) {
+          setEffects(s => [...s, { 
+            kind: 'critical_burst', 
+            x: pos.x, 
+            y: pos.y, 
+            t: Date.now(), 
+            ttl: 1200, 
+            color: '#ff0066',
+            size: 30
+          }])
+        }
       }
     }
     if (latest.startsWith('Enemy defeated! Loot:')) {
@@ -202,16 +229,27 @@ const GameCanvas = React.memo(function GameCanvas() {
     // Handle dodge/miss feedback
     if (latest.includes('dodged')) {
       if (latest.includes('Player dodged')) {
-        // Player dodged enemy attack
+        // Player dodged enemy attack - enhanced feedback
         setEffects(s => [...s, { 
           kind: 'dodge', 
           x: playerPos.x + (Math.random()-0.5)*20, 
           y: playerPos.y - 20 + (Math.random()-0.5)*10, 
           t: Date.now(), 
-          ttl: 1200, 
+          ttl: 1500, 
           text: 'DODGE!', 
-          color: '#22d3ee',
-          size: 16
+          color: '#00ffff',
+          size: 18
+        }])
+        
+        // Add dodge burst effect
+        setEffects(s => [...s, { 
+          kind: 'dodge_burst', 
+          x: playerPos.x, 
+          y: playerPos.y, 
+          t: Date.now(), 
+          ttl: 800, 
+          color: '#00ffff',
+          size: 20
         }])
       } else {
         // Enemy dodged player attack - find which enemy
@@ -342,6 +380,96 @@ const GameCanvas = React.memo(function GameCanvas() {
           ttl: 700,
           color: '#ffaa00',
           size: 18
+        }])
+      } else if (skillType === 'ice_shard') {
+        setEffects(s => [...s, { 
+          kind: 'ice_shard', 
+          x: playerPos.x, 
+          y: playerPos.y, 
+          t: Date.now(), 
+          ttl: 1000,
+          color: '#74c0fc',
+          size: 12
+        }])
+      } else if (skillType === 'ground_slam') {
+        setEffects(s => [...s, { 
+          kind: 'ground_slam', 
+          x: playerPos.x, 
+          y: playerPos.y, 
+          t: Date.now(), 
+          ttl: 800,
+          color: '#8b5a2b',
+          size: 25
+        }])
+      } else if (skillType === 'poison_arrow') {
+        setEffects(s => [...s, { 
+          kind: 'poison_arrow', 
+          x: playerPos.x, 
+          y: playerPos.y, 
+          t: Date.now(), 
+          ttl: 3000,
+          color: '#51cf66',
+          size: 20
+        }])
+      } else if (skillType === 'chain_lightning') {
+        setEffects(s => [...s, { 
+          kind: 'chain_lightning', 
+          x: playerPos.x, 
+          y: playerPos.y, 
+          t: Date.now(), 
+          ttl: 800,
+          color: '#ffd43b',
+          size: 16
+        }])
+      } else if (skillType === 'meteor') {
+        setEffects(s => [...s, { 
+          kind: 'meteor', 
+          x: playerPos.x, 
+          y: playerPos.y, 
+          t: Date.now(), 
+          ttl: 1200,
+          color: '#ff6b6b',
+          size: 35
+        }])
+      } else if (skillType === 'blade_vortex') {
+        setEffects(s => [...s, { 
+          kind: 'blade_vortex', 
+          x: playerPos.x, 
+          y: playerPos.y, 
+          t: Date.now(), 
+          ttl: 5000,
+          color: '#c0c0c0',
+          size: 22
+        }])
+      } else if (skillType === 'frost_nova') {
+        setEffects(s => [...s, { 
+          kind: 'frost_nova', 
+          x: playerPos.x, 
+          y: playerPos.y, 
+          t: Date.now(), 
+          ttl: 1000,
+          color: '#74c0fc',
+          size: 28
+        }])
+      } else if (skillType === 'cleave') {
+        setEffects(s => [...s, { 
+          kind: 'cleave', 
+          x: playerPos.x, 
+          y: playerPos.y, 
+          t: Date.now(), 
+          ttl: 600,
+          color: '#fbbf24',
+          size: 20
+        }])
+      } else if (skillType === 'summon_skeletons') {
+        setEffects(s => [...s, { 
+          kind: 'summon_skeletons', 
+          x: playerPos.x, 
+          y: playerPos.y, 
+          t: Date.now(), 
+          ttl: 2000,
+          color: '#9ca3af',
+          size: 15
         }])
       }
     }
@@ -826,7 +954,7 @@ const GameCanvas = React.memo(function GameCanvas() {
       const age = Date.now() - e.t;
       const progress = Math.min(1, age / e.ttl);
 
-      if (e.kind === 'damage' || e.kind === 'player_damage' || e.kind === 'dodge' || e.kind === 'miss' || e.kind === 'block') {
+      if (e.kind === 'damage' || e.kind === 'critical_damage' || e.kind === 'player_damage' || e.kind === 'dodge' || e.kind === 'miss' || e.kind === 'block') {
         ctx.save();
         ctx.globalAlpha = 1 - progress;
         ctx.fillStyle = e.color;
@@ -836,6 +964,14 @@ const GameCanvas = React.memo(function GameCanvas() {
           ctx.font = `bold ${(e.size || 16) * camera.zoom}px Arial`;
           ctx.strokeStyle = '#000';
           ctx.lineWidth = 2 * camera.zoom;
+        } else if (e.kind === 'critical_damage') {
+          // Enhanced styling for critical hits
+          ctx.font = `bold ${(e.size || 20) * camera.zoom}px Arial`;
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 3 * camera.zoom;
+          // Add pulsing effect for critical hits
+          const pulse = 1 + Math.sin(age * 0.01) * 0.2;
+          ctx.globalAlpha = (1 - progress) * pulse;
         } else {
           ctx.font = `${(e.size || 16) * camera.zoom}px bold sans-serif`;
         }
@@ -843,8 +979,8 @@ const GameCanvas = React.memo(function GameCanvas() {
         ctx.textAlign = 'center';
         const textY = effectScreenPos.y - progress * 20 * camera.zoom;
         
-        // Add outline for better visibility on dodge/miss/block
-        if (e.kind === 'dodge' || e.kind === 'miss' || e.kind === 'block') {
+        // Add outline for better visibility
+        if (e.kind === 'dodge' || e.kind === 'miss' || e.kind === 'block' || e.kind === 'critical_damage') {
           ctx.strokeText(e.text || '', effectScreenPos.x, textY);
         }
         
@@ -996,6 +1132,97 @@ const GameCanvas = React.memo(function GameCanvas() {
         ctx.fill();
         
         ctx.restore();
+      } else if (e.kind === 'critical_burst') {
+        ctx.save();
+        const progress = Math.min(1, age / e.ttl);
+        
+        // Create spectacular critical hit burst effect
+        const maxRadius = (e.size || 25) * camera.zoom;
+        const currentRadius = maxRadius * progress;
+        
+        // Outer explosion ring with pulsing
+        const pulse = 1 + Math.sin(age * 0.02) * 0.3;
+        ctx.globalAlpha = (1 - progress) * 0.8 * pulse;
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 6 * camera.zoom;
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, currentRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Inner bright flash
+        ctx.globalAlpha = (1 - progress) * 0.6;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, currentRadius * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Radiating energy lines
+        ctx.globalAlpha = (1 - progress) * 0.7;
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 3 * camera.zoom;
+        
+        for (let i = 0; i < 8; i++) {
+          const angle = (i * Math.PI / 4) + (age * 0.005);
+          const lineLength = currentRadius * 1.5;
+          const startX = effectScreenPos.x + Math.cos(angle) * currentRadius * 0.3;
+          const startY = effectScreenPos.y + Math.sin(angle) * currentRadius * 0.3;
+          const endX = effectScreenPos.x + Math.cos(angle) * lineLength;
+          const endY = effectScreenPos.y + Math.sin(angle) * lineLength;
+          
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(endX, endY);
+          ctx.stroke();
+        }
+        
+        ctx.restore();
+      } else if (e.kind === 'dodge_burst') {
+        ctx.save();
+        const progress = Math.min(1, age / e.ttl);
+        
+        // Create dodge burst effect with expanding rings
+        const maxRadius = (e.size || 20) * camera.zoom;
+        const currentRadius = maxRadius * progress;
+        
+        // Outer dodge ring
+        ctx.globalAlpha = (1 - progress) * 0.7;
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 3 * camera.zoom;
+        ctx.setLineDash([8 * camera.zoom, 4 * camera.zoom]);
+        ctx.lineDashOffset = progress * 20;
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, currentRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Inner bright flash
+        ctx.globalAlpha = (1 - progress) * 0.5;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, currentRadius * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Speed lines to show evasion
+        ctx.globalAlpha = (1 - progress) * 0.6;
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 2 * camera.zoom;
+        ctx.setLineDash([]);
+        
+        for (let i = 0; i < 6; i++) {
+          const angle = (i * Math.PI / 3) + (age * 0.01);
+          const lineStart = currentRadius * 0.5;
+          const lineEnd = currentRadius * 1.2;
+          const startX = effectScreenPos.x + Math.cos(angle) * lineStart;
+          const startY = effectScreenPos.y + Math.sin(angle) * lineStart;
+          const endX = effectScreenPos.x + Math.cos(angle) * lineEnd;
+          const endY = effectScreenPos.y + Math.sin(angle) * lineEnd;
+          
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(endX, endY);
+          ctx.stroke();
+        }
+        
+        ctx.restore();
       } else if (e.kind === 'pickup') {
         ctx.save();
         ctx.globalAlpha = 1 - progress;
@@ -1128,6 +1355,338 @@ const GameCanvas = React.memo(function GameCanvas() {
           ctx.fill();
         }
         
+        ctx.restore();
+      } else if (e.kind === 'ice_shard') {
+        ctx.save();
+        const progress = Math.min(1, age / e.ttl);
+        ctx.globalAlpha = (1 - progress) * 0.8;
+        
+        // Create ice shard effect with crystalline appearance
+        const radius = (e.size || 12) * camera.zoom;
+        
+        // Draw ice crystal
+        ctx.fillStyle = e.color;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const angle = (i * Math.PI / 3) + (age * 0.002);
+          const x = effectScreenPos.x + Math.cos(angle) * radius;
+          const y = effectScreenPos.y + Math.sin(angle) * radius;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        
+        // Add frost particles
+        ctx.globalAlpha = (1 - progress) * 0.6;
+        ctx.fillStyle = '#ffffff';
+        for (let i = 0; i < 8; i++) {
+          const angle = (i * Math.PI / 4) + (age * 0.005);
+          const distance = radius * 1.5;
+          const x = effectScreenPos.x + Math.cos(angle) * distance;
+          const y = effectScreenPos.y + Math.sin(angle) * distance;
+          ctx.beginPath();
+          ctx.arc(x, y, 2 * camera.zoom, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        
+        ctx.restore();
+      } else if (e.kind === 'ground_slam') {
+        ctx.save();
+        const progress = Math.min(1, age / e.ttl);
+        ctx.globalAlpha = (1 - progress) * 0.8;
+        
+        // Create ground slam shockwave
+        const radius = (e.size || 25) * progress * 2;
+        
+        // Outer shockwave ring
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 6 * camera.zoom;
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Inner dust cloud
+        ctx.globalAlpha = (1 - progress) * 0.5;
+        ctx.fillStyle = '#8b7355';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Rock debris
+        ctx.globalAlpha = (1 - progress) * 0.7;
+        ctx.fillStyle = e.color;
+        for (let i = 0; i < 6; i++) {
+          const angle = (i * Math.PI / 3) + (age * 0.003);
+          const distance = radius * 0.8;
+          const x = effectScreenPos.x + Math.cos(angle) * distance;
+          const y = effectScreenPos.y + Math.sin(angle) * distance;
+          ctx.fillRect(x - 2, y - 2, 4 * camera.zoom, 4 * camera.zoom);
+        }
+        
+        ctx.restore();
+      } else if (e.kind === 'poison_arrow') {
+        ctx.save();
+        const progress = Math.min(1, age / e.ttl);
+        ctx.globalAlpha = (1 - progress) * 0.7;
+        
+        // Create poison cloud effect
+        const radius = (e.size || 20) * camera.zoom;
+        
+        // Poison cloud
+        ctx.fillStyle = e.color;
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Toxic bubbles
+        ctx.globalAlpha = (1 - progress) * 0.5;
+        ctx.fillStyle = '#40c057';
+        for (let i = 0; i < 12; i++) {
+          const angle = (i * Math.PI / 6) + (age * 0.004);
+          const distance = radius * (0.5 + Math.sin(age * 0.01 + i) * 0.3);
+          const x = effectScreenPos.x + Math.cos(angle) * distance;
+          const y = effectScreenPos.y + Math.sin(angle) * distance;
+          const bubbleSize = (2 + Math.sin(age * 0.008 + i) * 1) * camera.zoom;
+          ctx.beginPath();
+          ctx.arc(x, y, bubbleSize, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        
+        ctx.restore();
+      } else if (e.kind === 'chain_lightning') {
+        ctx.save();
+        const progress = Math.min(1, age / e.ttl);
+        ctx.globalAlpha = (1 - progress) * 0.9;
+        
+        // Create chain lightning effect
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 4 * camera.zoom;
+        ctx.lineCap = 'round';
+        
+        // Draw multiple lightning chains
+        for (let chain = 0; chain < 3; chain++) {
+          const chainAngle = (chain * Math.PI * 2 / 3) + (age * 0.01);
+          const chainLength = (e.size || 16) * camera.zoom;
+          
+          ctx.beginPath();
+          ctx.moveTo(effectScreenPos.x, effectScreenPos.y);
+          
+          for (let i = 1; i <= 5; i++) {
+            const segmentProgress = i / 5;
+            const x = effectScreenPos.x + Math.cos(chainAngle) * chainLength * segmentProgress + (Math.random() - 0.5) * 15 * camera.zoom;
+            const y = effectScreenPos.y + Math.sin(chainAngle) * chainLength * segmentProgress + (Math.random() - 0.5) * 15 * camera.zoom;
+            ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }
+        
+        // Central spark
+        ctx.globalAlpha = (1 - progress) * 0.8;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, 4 * camera.zoom, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
+      } else if (e.kind === 'meteor') {
+        ctx.save();
+        const progress = Math.min(1, age / e.ttl);
+        ctx.globalAlpha = (1 - progress) * 0.8;
+        
+        // Create meteor impact effect
+        const radius = (e.size || 35) * progress * 1.5;
+        
+        // Outer fire ring
+        ctx.fillStyle = e.color;
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Inner molten core
+        ctx.globalAlpha = (1 - progress) * 0.6;
+        ctx.fillStyle = '#ff8800';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // White hot center
+        ctx.globalAlpha = (1 - progress) * 0.4;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Fire sparks
+        ctx.globalAlpha = (1 - progress) * 0.7;
+        ctx.fillStyle = '#ff4400';
+        for (let i = 0; i < 10; i++) {
+          const angle = (i * Math.PI / 5) + (age * 0.005);
+          const distance = radius * (1.2 + Math.sin(age * 0.01 + i) * 0.3);
+          const x = effectScreenPos.x + Math.cos(angle) * distance;
+          const y = effectScreenPos.y + Math.sin(angle) * distance;
+          const sparkSize = (3 + Math.sin(age * 0.008 + i) * 2) * camera.zoom;
+          ctx.beginPath();
+          ctx.arc(x, y, sparkSize, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        
+        ctx.restore();
+      } else if (e.kind === 'blade_vortex') {
+        ctx.save();
+        const progress = Math.min(1, age / e.ttl);
+        ctx.globalAlpha = (1 - progress) * 0.8;
+        
+        // Create spinning blade effect
+        const radius = (e.size || 22) * camera.zoom;
+        const rotation = age * 0.02;
+        
+        // Draw spinning blades
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 3 * camera.zoom;
+        ctx.lineCap = 'round';
+        
+        for (let blade = 0; blade < 4; blade++) {
+          const bladeAngle = rotation + (blade * Math.PI / 2);
+          const bladeLength = radius;
+          
+          const startX = effectScreenPos.x + Math.cos(bladeAngle) * (radius * 0.3);
+          const startY = effectScreenPos.y + Math.sin(bladeAngle) * (radius * 0.3);
+          const endX = effectScreenPos.x + Math.cos(bladeAngle) * bladeLength;
+          const endY = effectScreenPos.y + Math.sin(bladeAngle) * bladeLength;
+          
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(endX, endY);
+          ctx.stroke();
+        }
+        
+        // Central vortex
+        ctx.globalAlpha = (1 - progress) * 0.6;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, 4 * camera.zoom, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
+      } else if (e.kind === 'frost_nova') {
+        ctx.save();
+        const progress = Math.min(1, age / e.ttl);
+        ctx.globalAlpha = (1 - progress) * 0.8;
+        
+        // Create frost nova explosion
+        const radius = (e.size || 28) * progress * 2;
+        
+        // Outer frost ring
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 5 * camera.zoom;
+        ctx.setLineDash([8 * camera.zoom, 4 * camera.zoom]);
+        ctx.lineDashOffset = age * 0.01;
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Inner ice burst
+        ctx.globalAlpha = (1 - progress) * 0.6;
+        ctx.fillStyle = '#a5f3fc';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Ice shards
+        ctx.globalAlpha = (1 - progress) * 0.7;
+        ctx.fillStyle = e.color;
+        for (let i = 0; i < 8; i++) {
+          const angle = (i * Math.PI / 4) + (age * 0.003);
+          const distance = radius * 0.8;
+          const x = effectScreenPos.x + Math.cos(angle) * distance;
+          const y = effectScreenPos.y + Math.sin(angle) * distance;
+          
+          // Draw diamond-shaped ice shard
+          ctx.beginPath();
+          ctx.moveTo(x, y - 4 * camera.zoom);
+          ctx.lineTo(x + 3 * camera.zoom, y);
+          ctx.lineTo(x, y + 4 * camera.zoom);
+          ctx.lineTo(x - 3 * camera.zoom, y);
+          ctx.closePath();
+          ctx.fill();
+        }
+        
+        ctx.setLineDash([]);
+        ctx.restore();
+      } else if (e.kind === 'cleave') {
+        ctx.save();
+        const progress = Math.min(1, age / e.ttl);
+        ctx.globalAlpha = (1 - progress) * 0.9;
+        
+        // Create cleave arc effect
+        const radius = (e.size || 20) * camera.zoom;
+        const arcAngle = Math.PI; // 180 degree arc
+        
+        // Draw cleave arc
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 6 * camera.zoom;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius, -arcAngle / 2, arcAngle / 2);
+        ctx.stroke();
+        
+        // Add slash lines
+        ctx.globalAlpha = (1 - progress) * 0.7;
+        ctx.lineWidth = 3 * camera.zoom;
+        for (let i = 0; i < 3; i++) {
+          const lineAngle = -arcAngle / 2 + (i * arcAngle / 2);
+          const startX = effectScreenPos.x + Math.cos(lineAngle) * (radius * 0.5);
+          const startY = effectScreenPos.y + Math.sin(lineAngle) * (radius * 0.5);
+          const endX = effectScreenPos.x + Math.cos(lineAngle) * radius;
+          const endY = effectScreenPos.y + Math.sin(lineAngle) * radius;
+          
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(endX, endY);
+          ctx.stroke();
+        }
+        
+        ctx.restore();
+      } else if (e.kind === 'summon_skeletons') {
+        ctx.save();
+        const progress = Math.min(1, age / e.ttl);
+        ctx.globalAlpha = (1 - progress) * 0.8;
+        
+        // Create summoning circle effect
+        const radius = (e.size || 15) * camera.zoom;
+        
+        // Summoning circle
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = 3 * camera.zoom;
+        ctx.setLineDash([6 * camera.zoom, 3 * camera.zoom]);
+        ctx.lineDashOffset = age * 0.01;
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Inner necromantic energy
+        ctx.globalAlpha = (1 - progress) * 0.6;
+        ctx.fillStyle = '#6b7280';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Bone fragments
+        ctx.globalAlpha = (1 - progress) * 0.7;
+        ctx.fillStyle = '#f3f4f6';
+        for (let i = 0; i < 6; i++) {
+          const angle = (i * Math.PI / 3) + (age * 0.004);
+          const distance = radius * 0.7;
+          const x = effectScreenPos.x + Math.cos(angle) * distance;
+          const y = effectScreenPos.y + Math.sin(angle) * distance;
+          
+          // Draw small bone-like rectangles
+          ctx.fillRect(x - 1, y - 3, 2 * camera.zoom, 6 * camera.zoom);
+          ctx.fillRect(x - 3, y - 1, 6 * camera.zoom, 2 * camera.zoom);
+        }
+        
+        ctx.setLineDash([]);
         ctx.restore();
       }
     });

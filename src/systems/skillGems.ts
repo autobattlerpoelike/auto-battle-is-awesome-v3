@@ -917,32 +917,32 @@ export function getSkillTagsDisplay(skill: SkillGem | SupportGem): string {
 
 // Skill scaling calculation functions
 export function getScaledSkillDamage(skill: SkillGem): number {
-  if (!skill.scaling.baseDamage) return 0
+  if (!skill.scaling || !skill.scaling.baseDamage) return 0
   return Math.floor(skill.scaling.baseDamage + (skill.scaling.damagePerLevel || 0) * (skill.level - 1))
 }
 
 export function getScaledManaCost(skill: SkillGem): number {
+  if (!skill.scaling) return skill.manaCost || 0
   const baseManaCost = skill.scaling.baseManaCost || skill.manaCost
   const manaCostPerLevel = skill.scaling.manaCostPerLevel || 0
   return Math.max(1, Math.floor(baseManaCost + manaCostPerLevel * (skill.level - 1)))
 }
 
 export function getScaledCooldown(skill: SkillGem): number {
+  if (!skill.scaling) return skill.cooldown || 0
   const baseCooldown = skill.scaling.baseCooldown || skill.cooldown
-  const cooldownReduction = skill.scaling.cooldownReductionPerLevel || 0
-  return Math.max(100, Math.floor(baseCooldown - cooldownReduction * (skill.level - 1)))
+  const cooldownReductionPerLevel = skill.scaling.cooldownReductionPerLevel || 0
+  return Math.max(0, Math.floor(baseCooldown - cooldownReductionPerLevel * (skill.level - 1)))
 }
 
 export function getScaledArea(skill: SkillGem): number {
-  const baseArea = skill.scaling.baseArea || 1.0
-  const areaPerLevel = skill.scaling.areaPerLevel || 0
-  return baseArea + areaPerLevel * (skill.level - 1)
+  if (!skill.scaling || !skill.scaling.baseArea) return 0
+  return skill.scaling.baseArea + (skill.scaling.areaPerLevel || 0) * (skill.level - 1)
 }
 
 export function getScaledDuration(skill: SkillGem): number {
-  const baseDuration = skill.scaling.baseDuration || 0
-  const durationPerLevel = skill.scaling.durationPerLevel || 0
-  return Math.floor(baseDuration + durationPerLevel * (skill.level - 1))
+  if (!skill.scaling || !skill.scaling.baseDuration) return 0
+  return (skill.scaling.baseDuration + (skill.scaling.durationPerLevel || 0) * (skill.level - 1)) / 1000
 }
 
 export function getScaledSupportGemValue(supportGem: SupportGem): number {
@@ -974,6 +974,19 @@ export function applyModifiersToSkill(skill: SkillGem): {
   duration: number
   projectileCount: number
 } {
+  // Defensive check for skill.scaling
+  if (!skill || !skill.scaling) {
+    console.warn('applyModifiersToSkill: skill or skill.scaling is undefined', skill)
+    return {
+      damage: 0,
+      manaCost: 0,
+      cooldown: 0,
+      area: 1,
+      duration: 0,
+      projectileCount: 1
+    }
+  }
+
   // Start with base scaled values
   let damage = getScaledSkillDamage(skill)
   let manaCost = getScaledManaCost(skill)

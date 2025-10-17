@@ -67,9 +67,9 @@ const InventoryItem = memo(({
             {/* Show new equipment stats */}
             {item.baseStats ? (
               <>
-                {item.baseStats.damage && `Damage: ${Math.floor(item.baseStats.damage)}`}
-                {item.baseStats.armor && `Armor: ${Math.floor(item.baseStats.armor)}`}
-                {item.baseStats.health && ` • HP: +${Math.floor(item.baseStats.health)}`}
+                {item.baseStats.damage && `Damage: ${item.baseStats.damage.toFixed(2)}`}
+                {item.baseStats.armor && `Armor: ${item.baseStats.armor.toFixed(2)}`}
+                {item.baseStats.health && ` • HP: +${item.baseStats.health.toFixed(2)}`}
                 {item.category && ` • ${item.category}`}
                 {item.slot && ` • ${item.slot}`}
               </>
@@ -221,7 +221,7 @@ const InventoryPanel = memo(function InventoryPanel() {
         </div>
       </div>
       <div className="mb-3 flex justify-between items-center">
-        <div className="text-yellow-400 text-sm">Gold: {Math.floor(state.player.gold)}</div>
+        <div className="text-yellow-400 text-sm">Gold: {state.player.gold.toFixed(2)}</div>
         {state.inventory.length > 0 && (
           <button
             onClick={handleSellAll}
