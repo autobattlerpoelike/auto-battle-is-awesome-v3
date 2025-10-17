@@ -1044,24 +1044,24 @@ body {
 }
 
 .skill-tooltip {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
+  position: fixed;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 12px;
-  z-index: 100;
+  z-index: 200;
   box-shadow: 0 4px 12px var(--shadow-color);
-  margin-top: 5px;
+  max-width: 400px;
+  min-width: 300px;
+  pointer-events: auto;
 }
 
 .tooltip-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 8px;
+  gap: 8px;
 }
 
 .tooltip-header h4 {

@@ -631,7 +631,7 @@ function reducer(state: GameState, action: GameAction): GameState {
         // Lightning bolt targets nearest enemy
         const nearestEnemy = state.enemies.find(e => e.hp > 0)
         if (nearestEnemy) {
-          newLog.unshift(`ANIM_SKILL|lightning|${nearestEnemy.id}|${Date.now()}`)
+          newLog.unshift(`ANIM_SKILL|lightning_bolt|${nearestEnemy.id}|${Date.now()}`)
           const damage = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
           newLog.unshift(`ANIM_PLAYER|${nearestEnemy.id}|magic|Magic|hit|${damage}`)
         }
@@ -642,6 +642,78 @@ function reducer(state: GameState, action: GameAction): GameState {
           const damage = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
           newLog.unshift(`ANIM_PLAYER|${nearestEnemy.id}|melee|Unique|hit|${damage}`)
         }
+      } else if (skill.id === 'ice_shard') {
+        // Ice shard targets nearest enemy
+        const nearestEnemy = state.enemies.find(e => e.hp > 0)
+        if (nearestEnemy) {
+          newLog.unshift(`ANIM_SKILL|ice_shard|${nearestEnemy.id}|${Date.now()}`)
+          const damage = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
+          newLog.unshift(`ANIM_PLAYER|${nearestEnemy.id}|magic|Magic|hit|${damage}`)
+        }
+      } else if (skill.id === 'ground_slam') {
+        // Ground slam hits all nearby enemies
+        newLog.unshift(`ANIM_SKILL|ground_slam|${Date.now()}|800`)
+        const damage = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
+        state.enemies.forEach(enemy => {
+          if (enemy.hp > 0) {
+            newLog.unshift(`ANIM_PLAYER|${enemy.id}|melee|Rare|hit|${damage}`)
+          }
+        })
+      } else if (skill.id === 'poison_arrow') {
+        // Poison arrow targets nearest enemy
+        const nearestEnemy = state.enemies.find(e => e.hp > 0)
+        if (nearestEnemy) {
+          newLog.unshift(`ANIM_SKILL|poison_arrow|${nearestEnemy.id}|${Date.now()}`)
+          const damage = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
+          newLog.unshift(`ANIM_PLAYER|${nearestEnemy.id}|ranged|Magic|hit|${damage}`)
+        }
+      } else if (skill.id === 'chain_lightning') {
+        // Chain lightning hits multiple enemies
+        newLog.unshift(`ANIM_SKILL|chain_lightning|${Date.now()}|800`)
+        const damage = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
+        const aliveEnemies = state.enemies.filter(e => e.hp > 0).slice(0, 3) // Chain to up to 3 enemies
+        aliveEnemies.forEach(enemy => {
+          newLog.unshift(`ANIM_PLAYER|${enemy.id}|magic|Rare|hit|${damage}`)
+        })
+      } else if (skill.id === 'meteor') {
+        // Meteor hits all enemies in area
+        newLog.unshift(`ANIM_SKILL|meteor|${Date.now()}|1200`)
+        const damage = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
+        state.enemies.forEach(enemy => {
+          if (enemy.hp > 0) {
+            newLog.unshift(`ANIM_PLAYER|${enemy.id}|magic|Unique|hit|${damage}`)
+          }
+        })
+      } else if (skill.id === 'blade_vortex') {
+        // Blade vortex creates spinning blades around player
+        newLog.unshift(`ANIM_SKILL|blade_vortex|${Date.now()}|5000`)
+        const damage = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
+        state.enemies.forEach(enemy => {
+          if (enemy.hp > 0) {
+            newLog.unshift(`ANIM_PLAYER|${enemy.id}|magic|Rare|hit|${damage}`)
+          }
+        })
+      } else if (skill.id === 'frost_nova') {
+        // Frost nova freezes and damages all nearby enemies
+        newLog.unshift(`ANIM_SKILL|frost_nova|${Date.now()}|1000`)
+        const damage = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
+        state.enemies.forEach(enemy => {
+          if (enemy.hp > 0) {
+            newLog.unshift(`ANIM_PLAYER|${enemy.id}|magic|Magic|hit|${damage}`)
+          }
+        })
+      } else if (skill.id === 'cleave') {
+        // Cleave hits enemies in front of player
+        newLog.unshift(`ANIM_SKILL|cleave|${Date.now()}|600`)
+        const damage = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
+        const nearbyEnemies = state.enemies.filter(e => e.hp > 0).slice(0, 3) // Hit up to 3 enemies
+        nearbyEnemies.forEach(enemy => {
+          newLog.unshift(`ANIM_PLAYER|${enemy.id}|melee|Rare|hit|${damage}`)
+        })
+      } else if (skill.id === 'summon_skeletons') {
+        // Summon skeletons creates minions
+        newLog.unshift(`ANIM_SKILL|summon_skeletons|${Date.now()}|2000`)
+        newLog.unshift(`Summoned skeleton minions!`)
       } else if (skill.id === 'heal') {
         // Heal restores player health
         const healAmount = Math.floor(skill.scaling.baseDamage! + (skill.level - 1) * skill.scaling.damagePerLevel!)
@@ -790,10 +862,16 @@ export function GameProvider({ children }: GameProviderProps) {
     dispatch({ type: 'UPDATE_PLAYER_POSITION', payload: position })
   }, [])
 
-  // auto-spawn loop
+  // auto-spawn loop - spawn 5 monsters at a time
   useEffect(() => {
     const tid = setInterval(() => {
-      if (state.enemies.length < 25) dispatch({ type: 'SPAWN' })
+      if (state.enemies.length < 25) {
+        // Spawn up to 5 monsters at once, but don't exceed the 25 limit
+        const spawnCount = Math.min(5, 25 - state.enemies.length)
+        for (let i = 0; i < spawnCount; i++) {
+          dispatch({ type: 'SPAWN' })
+        }
+      }
     }, 2200)
     return () => clearInterval(tid)
   }, [state.enemies.length])

@@ -18,6 +18,7 @@ import './utils/performanceTest' // Import performance testing utilities
 export default function App() {
   const [activeModal, setActiveModal] = useState<string | null>(null)
   const [isSkillGemPanelVisible, setIsSkillGemPanelVisible] = useState(false)
+  const [isInventoryPanelVisible, setIsInventoryPanelVisible] = useState(false)
 
   const openModal = (modalType: string) => {
     setActiveModal(modalType)
@@ -38,8 +39,6 @@ export default function App() {
 
       case 'combinations':
         return <SkillCombinationsPanel />
-      case 'inventory':
-        return <InventoryPanel />
       case 'log':
         return <CombatLogPanel />
       case 'maps':
@@ -60,8 +59,6 @@ export default function App() {
 
       case 'combinations':
         return 'Skill Combinations'
-      case 'inventory':
-        return 'Inventory'
       case 'log':
         return 'Combat Log'
       case 'maps':
@@ -113,14 +110,44 @@ export default function App() {
         {renderModalContent()}
       </Modal>
       
+      {/* Floating Inventory Button */}
+      {!isInventoryPanelVisible && (
+        <button
+          onClick={() => setIsInventoryPanelVisible(true)}
+          className="fixed bottom-32 right-4 bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-lg text-sm font-medium shadow-lg z-50 transition-all duration-200"
+        >
+          🎒 Inventory
+        </button>
+      )}
+
       {/* Skill Gem Panel Toggle Button */}
       {!isSkillGemPanelVisible && (
         <button
           onClick={() => setIsSkillGemPanelVisible(true)}
-          className="fixed bottom-20 right-4 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-medium shadow-lg z-50"
+          className="fixed bottom-20 right-4 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-medium shadow-lg z-50 transition-all duration-200"
         >
           💎 Skill Gems
         </button>
+      )}
+      
+      {/* Floating Inventory Panel */}
+      {isInventoryPanelVisible && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setIsInventoryPanelVisible(false)}>
+          <div className="bg-gray-800 border border-gray-600 rounded-lg shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-3 border-b border-gray-600">
+              <h3 className="text-lg font-bold text-white">🎒 Inventory</h3>
+              <button
+                onClick={() => setIsInventoryPanelVisible(false)}
+                className="text-gray-400 hover:text-white transition-colors text-xl px-2 py-1 hover:bg-gray-700 rounded"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-auto max-h-[calc(90vh-60px)]">
+              <InventoryPanel />
+            </div>
+          </div>
+        </div>
       )}
       
       {/* Skill Gem Panel */}

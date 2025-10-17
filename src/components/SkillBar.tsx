@@ -13,7 +13,8 @@ interface SkillBarProps {
 export function SkillBar({ className = '' }: SkillBarProps) {
   const { state, actions } = useGame()
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null)
-  const [showSupportDetails, setShowSupportDetails] = useState<{ [key: string]: boolean }>({})
+  const [showSupportDetails, setShowSupportDetails] = useState<Record<string, boolean>>({})
+  const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null)
 
   const skillBar = state.player.skillBar
   const maxSlots = skillBar?.maxSlots || 6
@@ -23,8 +24,19 @@ export function SkillBar({ className = '' }: SkillBarProps) {
     return skillBar.slots[slotIndex] || null
   }
 
-  const handleSlotClick = (slotIndex: number) => {
-    setSelectedSlot(selectedSlot === slotIndex ? null : slotIndex)
+  const handleSlotClick = (slotIndex: number, event?: React.MouseEvent) => {
+    if (selectedSlot === slotIndex) {
+      setSelectedSlot(null)
+      setTooltipPosition(null)
+    } else {
+      setSelectedSlot(slotIndex)
+      if (event) {
+        setTooltipPosition({
+          x: event.clientX + 10,
+          y: event.clientY + 10
+        })
+      }
+    }
   }
 
   const handleUnequipSkill = (slotIndex: number, e: React.MouseEvent) => {
@@ -49,7 +61,7 @@ export function SkillBar({ className = '' }: SkillBarProps) {
       <div
         key={slotIndex}
         className={`skill-slot ${isEmpty ? 'empty' : 'filled'} ${isSelected ? 'selected' : ''}`}
-        onClick={() => handleSlotClick(slotIndex)}
+        onClick={(e) => handleSlotClick(slotIndex, e)}
       >
         <div className="slot-number">{slotIndex + 1}</div>
         
@@ -77,11 +89,31 @@ export function SkillBar({ className = '' }: SkillBarProps) {
               ×
             </button>
             
-            {isSelected && (
-              <div className="skill-tooltip">
+            {isSelected && tooltipPosition && (
+              <div 
+                className="skill-tooltip"
+                style={{
+                  left: Math.min(tooltipPosition.x, window.innerWidth - 400),
+                  top: Math.min(tooltipPosition.y, window.innerHeight - 300)
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className="tooltip-header">
-                  <h4>{skill.name}</h4>
-                  <span className="skill-type">{skill.type}</span>
+                  <div>
+                    <h4>{skill.name}</h4>
+                    <span className="skill-type">{skill.type}</span>
+                  </div>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedSlot(null)
+                      setTooltipPosition(null)
+                    }}
+                    className="text-gray-400 hover:text-white text-xl leading-none p-1 hover:bg-gray-700 rounded"
+                    title="Close tooltip"
+                  >
+                    ×
+                  </button>
                 </div>
                 
                 {/* Skill Tags */}
@@ -190,7 +222,16 @@ export function SkillBar({ className = '' }: SkillBarProps) {
   }
 
   return (
-    <div className={`skill-bar-container ${className}`}>
+    <div 
+      className={`skill-bar-container ${className}`}
+      onClick={(e) => {
+        // Close tooltip when clicking outside
+        if (selectedSlot !== null && !e.defaultPrevented) {
+          setSelectedSlot(null)
+          setTooltipPosition(null)
+        }
+      }}
+    >
       <div className="skill-bar-header">
         <h3>Combat Skills</h3>
         <div className="skill-bar-info">

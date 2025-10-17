@@ -70,7 +70,7 @@ const EquipmentSlotComponent = memo(({
       
       {/* Equipment Slot */}
       <div
-        className="relative bg-gray-800/70 border-2 rounded-xl p-3 h-20 flex flex-col items-center justify-center hover:bg-gray-700/70 transition-all cursor-pointer"
+        className="relative bg-gray-800/70 border-2 rounded-xl p-2 h-24 flex flex-col items-center justify-center hover:bg-gray-700/70 transition-all cursor-pointer overflow-hidden"
         style={{
           borderColor: equippedItem ? rarityColor(equippedItem.rarity) : '#4b5563',
           boxShadow: equippedItem ? `0 0 15px ${rarityColor(equippedItem.rarity)}20` : 'none'
@@ -96,8 +96,8 @@ const EquipmentSlotComponent = memo(({
               className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-900/80"
               style={{ color: rarityColor(equippedItem.rarity) }}
             >
-              {equippedItem.power ? `+${equippedItem.power.toFixed(2)}` : 
-               equippedItem.baseStats?.damage ? `+${equippedItem.baseStats.damage.toFixed(2)}` :
+              {equippedItem.power && typeof equippedItem.power === 'number' && !isNaN(equippedItem.power) ? `+${equippedItem.power.toFixed(2)}` : 
+               equippedItem.baseStats?.damage && typeof equippedItem.baseStats.damage === 'number' && !isNaN(equippedItem.baseStats.damage) ? `+${equippedItem.baseStats.damage.toFixed(2)}` :
                '+?'}
             </div>
             
@@ -118,9 +118,9 @@ const EquipmentSlotComponent = memo(({
       
       {/* Item Name Below Slot */}
       {equippedItem && (
-        <div className="text-center mt-2">
+        <div className="text-center mt-2 max-w-full">
           <div 
-            className="text-xs font-bold truncate px-1"
+            className="text-xs font-bold truncate px-1 max-w-full"
             style={{ color: rarityColor(equippedItem.rarity) }}
             title={equippedItem.name}
           >
@@ -153,7 +153,7 @@ const EquipmentSlotComponent = memo(({
             {/* Stats */}
             <div className="border-t border-gray-700 pt-2">
               {/* Legacy power display */}
-              {equippedItem.power && (
+              {equippedItem.power && typeof equippedItem.power === 'number' && !isNaN(equippedItem.power) && (
                 <div className="text-orange-400 font-medium">
                   Power: +{equippedItem.power.toFixed(2)}
                 </div>
@@ -165,7 +165,7 @@ const EquipmentSlotComponent = memo(({
                   <div className="text-xs text-gray-400 mb-1">Base Stats:</div>
                   {Object.entries(equippedItem.baseStats).map(([stat, value]) => (
                     <div key={stat} className="text-xs">
-                      {stat}: +{typeof value === 'number' ? (value as number).toFixed(2) : String(value)}
+                      {stat}: +{typeof value === 'number' && !isNaN(value as number) ? (value as number).toFixed(2) : String(value)}
                     </div>
                   ))}
                 </div>
@@ -200,7 +200,7 @@ const EquipmentSlotComponent = memo(({
                   <div className="text-xs text-gray-400 mb-1">Affixes:</div>
                   {equippedItem.affixes.map((affix: any, i: number) => (
                     <div key={i} className="text-blue-300 text-xs">
-                      {affix.name}: +{affix.value.toFixed(2)}
+                      {affix.name}: +{affix.value && typeof affix.value === 'number' && !isNaN(affix.value) ? affix.value.toFixed(2) : (affix.value || '0')}
                     </div>
                   ))}
                 </div>
@@ -293,8 +293,8 @@ const EquipmentPanel = memo(function EquipmentPanel() {
       </div>
       
       {/* Equipment Grid */}
-      <div className="flex-1 p-4">
-        <div className="grid grid-cols-2 gap-3 h-full">
+      <div className="flex-1 p-4 overflow-auto">
+        <div className="grid grid-cols-2 gap-4 auto-rows-max">
           {EQUIPMENT_SLOTS.map(renderEquipmentSlot)}
         </div>
       </div>

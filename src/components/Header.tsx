@@ -46,12 +46,6 @@ export default function Header({ onOpenModal }: HeaderProps) {
             >
               🗺️ Maps
             </button>
-            <button 
-              onClick={() => onOpenModal('inventory')}
-              className="px-3 py-1.5 bg-green-900/50 hover:bg-green-800/60 border border-green-600/50 text-green-300 rounded-md transition-all duration-200 text-sm font-medium hover:shadow-lg hover:shadow-green-500/20"
-            >
-              🎒 Inventory
-            </button>
           </div>
           
           {/* Stats Section */}
