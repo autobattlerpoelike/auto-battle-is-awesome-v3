@@ -1,5 +1,6 @@
-import React, { useMemo, useCallback } from 'react'
+import React, { useMemo, useCallback, useState } from 'react'
 import { useGame } from '../systems/gameContext'
+import { StatTooltip, calculateStatBreakdown, STAT_DESCRIPTIONS } from './StatTooltip'
 
 // Utility functions for rarity and element formatting
 function rarityColor(r: string | undefined): string {
@@ -51,6 +52,63 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
   const p = state.player
   const skills = state.skills || {}
   
+  // Tooltip state
+  const [tooltip, setTooltip] = useState<{
+    visible: boolean
+    statName: string
+    statType: string
+    position: { x: number; y: number }
+  }>({
+    visible: false,
+    statName: '',
+    statType: '',
+    position: { x: 0, y: 0 }
+  })
+
+  // Handle stat hover
+  const handleStatHover = useCallback((event: React.MouseEvent, statName: string, statType: string) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    setTooltip({
+      visible: true,
+      statName,
+      statType,
+      position: {
+        x: rect.left + rect.width / 2,
+        y: rect.top
+      }
+    })
+  }, [])
+
+  const handleStatLeave = useCallback(() => {
+    setTooltip(prev => ({ ...prev, visible: false }))
+  }, [])
+
+  // Enhanced stat component with tooltip
+  const StatRow = useCallback(({ 
+    label, 
+    value, 
+    color, 
+    statType, 
+    suffix = '' 
+  }: { 
+    label: string
+    value: number | string
+    color: string
+    statType: string
+    suffix?: string
+  }) => (
+    <div 
+      className="flex justify-between cursor-help hover:bg-gray-700/30 px-1 py-0.5 rounded transition-colors"
+      onMouseEnter={(e) => handleStatHover(e, label, statType)}
+      onMouseLeave={handleStatLeave}
+    >
+      <span>{label}:</span>
+      <span className={color}>
+        {typeof value === 'number' ? value.toFixed(2) : value}{suffix}
+      </span>
+    </div>
+  ), [handleStatHover, handleStatLeave])
+
   // Memoize expensive calculations
   const derivedStats = useMemo(() => {
     const powerMultiplier = Math.pow(1.05, (skills['power']||0))
@@ -134,14 +192,18 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
               <span>XP:</span>
               <span className="text-green-400">{p.xp}/{p.nextLevelXp}</span>
             </div>
-            <div className="flex justify-between">
-              <span>HP:</span>
-              <span className="text-red-400">{p.hp.toFixed(2)}/{p.maxHp.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Mana:</span>
-              <span className="text-blue-400">{(p.mana || 0).toFixed(2)}/{(p.maxMana || 50).toFixed(2)}</span>
-            </div>
+            <StatRow 
+              label="HP" 
+              value={`${p.hp.toFixed(2)}/${p.maxHp.toFixed(2)}`} 
+              color="text-red-400" 
+              statType="health"
+            />
+            <StatRow 
+              label="Mana" 
+              value={`${(p.mana || 0).toFixed(2)}/${(p.maxMana || 50).toFixed(2)}`} 
+              color="text-blue-400" 
+              statType="mana"
+            />
           </div>
         </div>
 
@@ -149,26 +211,36 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
         <div className="bg-gray-800/50 p-2 rounded border border-gray-700">
           <h3 className="text-xs font-semibold text-purple-300 mb-1">💪 Attributes</h3>
           <div className="grid grid-cols-2 gap-1 text-xs">
-            <div className="flex justify-between">
-              <span>Strength:</span>
-              <span className="text-red-400">{(p.attributes?.strength || 10) + (p.calculatedStats?.strength || 0)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Dexterity:</span>
-              <span className="text-green-400">{(p.attributes?.dexterity || 10) + (p.calculatedStats?.dexterity || 0)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Intelligence:</span>
-              <span className="text-blue-400">{(p.attributes?.intelligence || 10) + (p.calculatedStats?.intelligence || 0)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Vitality:</span>
-              <span className="text-orange-400">{(p.attributes?.vitality || 10) + (p.calculatedStats?.vitality || 0)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Luck:</span>
-              <span className="text-yellow-400">{(p.attributes?.luck || 5) + (p.calculatedStats?.luck || 0)}</span>
-            </div>
+            <StatRow 
+              label="Strength" 
+              value={(p.attributes?.strength || 10) + (p.calculatedStats?.strength || 0)} 
+              color="text-red-400" 
+              statType="strength"
+            />
+            <StatRow 
+              label="Dexterity" 
+              value={(p.attributes?.dexterity || 10) + (p.calculatedStats?.dexterity || 0)} 
+              color="text-green-400" 
+              statType="dexterity"
+            />
+            <StatRow 
+              label="Intelligence" 
+              value={(p.attributes?.intelligence || 10) + (p.calculatedStats?.intelligence || 0)} 
+              color="text-blue-400" 
+              statType="intelligence"
+            />
+            <StatRow 
+              label="Vitality" 
+              value={(p.attributes?.vitality || 10) + (p.calculatedStats?.vitality || 0)} 
+              color="text-orange-400" 
+              statType="vitality"
+            />
+            <StatRow 
+              label="Luck" 
+              value={(p.attributes?.luck || 5) + (p.calculatedStats?.luck || 0)} 
+              color="text-yellow-400" 
+              statType="luck"
+            />
             <div className="flex justify-between">
               <span>Attr Points:</span>
               <span className="text-purple-400">{p.attributePoints || 0}</span>
@@ -180,34 +252,39 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
         <div className="bg-gray-800/50 p-2 rounded border border-gray-700">
           <h3 className="text-xs font-semibold text-red-300 mb-1">⚔️ Offensive</h3>
           <div className="grid grid-cols-2 gap-1 text-xs">
-            <div className="flex justify-between">
-              <span>Base DPS:</span>
-              <span className="text-orange-400">{(p.baseDps || 0).toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Total DPS:</span>
-              <span className="text-orange-300">{(p.dps || 0).toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Total Power:</span>
-              <span className="text-purple-400">{totalPower.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Est. DPS:</span>
-              <span className="text-yellow-400">{derivedStats.estimatedDps}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Attack Speed:</span>
-              <span className="text-yellow-300">{derivedStats.attackSpeed.toFixed(2)}x</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Crit Chance:</span>
-              <span className="text-red-400">{combatStats.totalCritChance.toFixed(2)}%</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Life Steal:</span>
-              <span className="text-pink-400">{combatStats.lifeSteal.toFixed(2)}%</span>
-            </div>
+            <StatRow 
+              label="Base DPS" 
+              value={p.baseDps || 0} 
+              color="text-orange-400" 
+              statType="damage"
+            />
+            <StatRow 
+              label="Total DPS" 
+              value={p.dps || 0} 
+              color="text-orange-300" 
+              statType="damage"
+            />
+            <StatRow 
+              label="Attack Speed" 
+              value={derivedStats.attackSpeed} 
+              color="text-yellow-300" 
+              statType="attackSpeed"
+              suffix="x"
+            />
+            <StatRow 
+              label="Crit Chance" 
+              value={combatStats.totalCritChance} 
+              color="text-red-400" 
+              statType="critChance"
+              suffix="%"
+            />
+            <StatRow 
+              label="Life Steal" 
+              value={combatStats.lifeSteal} 
+              color="text-pink-400" 
+              statType="lifeSteal"
+              suffix="%"
+            />
           </div>
         </div>
 
@@ -215,26 +292,40 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
         <div className="bg-gray-800/50 p-2 rounded border border-gray-700">
           <h3 className="text-xs font-semibold text-blue-300 mb-1">🛡️ Defensive</h3>
           <div className="grid grid-cols-2 gap-1 text-xs">
-            <div className="flex justify-between">
-              <span>Armor:</span>
-              <span className="text-gray-300">{combatStats.armor.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Dodge:</span>
-              <span className="text-green-400">{combatStats.dodgeChance.toFixed(2)}%</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Block:</span>
-              <span className="text-blue-400">{combatStats.blockChance.toFixed(2)}%</span>
-            </div>
-            <div className="flex justify-between">
-              <span>HP Regen:</span>
-              <span className="text-red-300">{combatStats.healthRegen.toFixed(2)}/s</span>
-            </div>
-            <div className="flex justify-between">
-              <span>MP Regen:</span>
-              <span className="text-blue-300">{combatStats.manaRegen.toFixed(2)}/s</span>
-            </div>
+            <StatRow 
+              label="Armor" 
+              value={combatStats.armor} 
+              color="text-gray-300" 
+              statType="armor"
+            />
+            <StatRow 
+              label="Dodge" 
+              value={combatStats.dodgeChance} 
+              color="text-green-400" 
+              statType="dodgeChance"
+              suffix="%"
+            />
+            <StatRow 
+              label="Block" 
+              value={combatStats.blockChance} 
+              color="text-blue-400" 
+              statType="blockChance"
+              suffix="%"
+            />
+            <StatRow 
+              label="HP Regen" 
+              value={combatStats.healthRegen} 
+              color="text-red-300" 
+              statType="healthRegen"
+              suffix="/s"
+            />
+            <StatRow 
+              label="MP Regen" 
+              value={combatStats.manaRegen} 
+              color="text-blue-300" 
+              statType="manaRegen"
+              suffix="/s"
+            />
             <div className="flex justify-between">
               <span>Proj Speed:</span>
               <span className="text-cyan-400">{derivedStats.projectileSpeed.toFixed(2)}x</span>
@@ -312,6 +403,17 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
           🔄 Reset Character
         </button>
       </div>
+
+      {/* Stat Tooltip */}
+      {tooltip.visible && (
+        <StatTooltip
+          statName={tooltip.statName}
+          breakdown={calculateStatBreakdown(p, tooltip.statType)}
+          description={STAT_DESCRIPTIONS[tooltip.statType]}
+          position={tooltip.position}
+          visible={tooltip.visible}
+        />
+      )}
     </div>
   )
 })
