@@ -102,7 +102,7 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
   const stats = p
   
   // Player attack phase - use new dodge calculation
-  let playerDodgeChance = (stats.dodgeChance || 0) + (p.skills?.agility || 0) * 0.01
+  let playerDodgeChance = (p.calculatedStats?.dodgeChance || 0) + (p.skills?.agility || 0) * 0.01
   
   // Legacy equipment dodge bonus
   if (p.equipped?.rarity) {
@@ -135,9 +135,14 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
   }
   
   if (didPlayerHit) {
-    // Calculate player damage using new system
-    let baseDmg = Math.max(1, Math.floor(stats.dps || p.dps || 1))
-    console.log(`Combat: Player DPS = ${stats.dps}, Base damage = ${baseDmg}`)
+    // Calculate player damage using enhanced system with all modifiers
+    let baseDmg = Math.max(1, Math.floor(p.dps || 1))
+    console.log(`Combat: Player DPS = ${p.dps}, Base damage = ${baseDmg}`)
+    
+    // Add weapon base damage from equipment stats
+    if (p.calculatedStats?.damage) {
+      baseDmg += p.calculatedStats.damage
+    }
     
     // Add attribute bonuses
     if (p.attributes) {
@@ -153,10 +158,26 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
       baseDmg += Math.floor((p.attributes.dexterity || 0) * 0.3)
     }
     
+    // Add elemental damage bonuses based on damage type from equipment stats
+    if (damageType === 'fire' && p.calculatedStats?.fireDamage) {
+      baseDmg += p.calculatedStats.fireDamage
+    } else if (damageType === 'ice' && p.calculatedStats?.iceDamage) {
+      baseDmg += p.calculatedStats.iceDamage
+    } else if (damageType === 'lightning' && p.calculatedStats?.lightningDamage) {
+      baseDmg += p.calculatedStats.lightningDamage
+    } else if (damageType === 'poison' && p.calculatedStats?.poisonDamage) {
+      baseDmg += p.calculatedStats.poisonDamage
+    }
+    
+    // Apply damage multiplier from equipment
+    if (p.calculatedStats?.damageMultiplier) {
+      baseDmg = Math.floor(baseDmg * (1 + p.calculatedStats.damageMultiplier))
+    }
+    
     const varianceDamage = calculateDamageVariance(baseDmg)
     
-    // Calculate critical hit chance
-    let critChance = stats.critChance || 0.05
+    // Calculate critical hit chance with all modifiers
+    let critChance = p.calculatedStats?.critChance || 0.05
     
     // Legacy equipment crit bonus
     if (p.equipped?.rarity) {
@@ -171,20 +192,57 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
     // Lightning damage type bonus
     if (damageType === 'lightning') critChance += 0.05
     
+    // Luck increases crit chance
+    if (p.attributes?.luck) {
+      critChance += ((p.attributes.luck || 0) * 0.001)
+    }
+    
     crit = Math.random() < critChance
     
-    // Apply critical multiplier
+    // Apply critical multiplier with equipment bonuses
     let critMultiplier = 1.8
+    if (p.calculatedStats?.critMultiplier) {
+      critMultiplier += p.calculatedStats.critMultiplier
+    }
     if (p.attributes?.luck) {
       critMultiplier += ((p.attributes.luck || 0) * 0.01) // Luck increases crit damage
     }
     
     damage = crit ? Math.floor(varianceDamage * critMultiplier) : varianceDamage
     
+    // Apply armor penetration
+    if (p.calculatedStats?.armorPenetration) {
+      // Armor penetration reduces enemy's effective armor
+      const effectiveEnemyArmor = Math.max(0, (e.armor || 0) * (1 - p.calculatedStats.armorPenetration))
+      // This will be used in damage reduction calculation later
+    }
+    
     // Apply elemental effects
     const elementalResult = applyElementalEffects(damage, damageType, e)
     damage = elementalResult.damage
     statusEffect = elementalResult.statusEffect
+    
+    // Apply life steal
+    if (p.calculatedStats?.lifeSteal && damage > 0) {
+      const healAmount = Math.floor(damage * p.calculatedStats.lifeSteal)
+      p.hp = Math.min(p.maxHp, p.hp + healAmount)
+    }
+    
+    // Apply mana steal
+    if (p.calculatedStats?.manaSteal && damage > 0) {
+      const manaAmount = Math.floor(damage * p.calculatedStats.manaSteal)
+      p.mana = Math.min(p.maxMana || 100, (p.mana || 0) + manaAmount)
+    }
+    
+    // Check for cleave chance (hit multiple enemies)
+    if (p.calculatedStats?.cleaveChance && Math.random() < p.calculatedStats.cleaveChance) {
+      statusEffect = statusEffect ? `${statusEffect}, cleave` : 'cleave'
+    }
+    
+    // Check for stun chance
+    if (p.calculatedStats?.stunChance && Math.random() < p.calculatedStats.stunChance) {
+      statusEffect = statusEffect ? `${statusEffect}, stunned` : 'stunned'
+    }
     
     e.hp -= damage
   }
@@ -212,7 +270,7 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
       msg += `. Player dodged ${e.name}'s attack!`
     } else {
       // Check for block
-      const blockChance = stats.blockChance || 0
+      const blockChance = p.calculatedStats?.blockChance || 0
       const blocked = Math.random() < blockChance
       
       if (blocked) {
@@ -243,10 +301,15 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
         
         enemyDamage = calculateDamageVariance(baseDamage)
         
-        // Apply armor reduction
-        const armor = stats.armor || 0
+        // Apply armor reduction with armor penetration consideration
+        const armor = p.calculatedStats?.armor || 0
         const armorReduction = Math.min(0.8, armor * 0.01) // Max 80% damage reduction
         enemyDamage = Math.floor(enemyDamage * (1 - armorReduction))
+        
+        // Apply damage reduction from equipment
+        if (p.calculatedStats?.damageReduction) {
+          enemyDamage = Math.floor(enemyDamage * (1 - p.calculatedStats.damageReduction))
+        }
         
         // Vitality reduces damage taken
         if (p.attributes?.vitality) {
@@ -256,11 +319,24 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
         
         enemyDamage = Math.max(1, enemyDamage) // Minimum 1 damage
         
+        // Apply thorns damage to enemy before taking damage
+        if (p.calculatedStats?.thorns && p.calculatedStats.thorns > 0) {
+          e.hp -= p.calculatedStats.thorns
+          msg += `. Thorns deals ${p.calculatedStats.thorns} damage to ${e.name}`
+        }
+        
+        // Apply reflect damage
+        if (p.calculatedStats?.reflectDamage && p.calculatedStats.reflectDamage > 0) {
+          const reflectedDamage = Math.floor(enemyDamage * p.calculatedStats.reflectDamage)
+          e.hp -= reflectedDamage
+          msg += `. Reflected ${reflectedDamage} damage to ${e.name}`
+        }
+        
         p.hp -= enemyDamage
         msg += `. ${e.name} hits back for ${enemyDamage}`
         
         if (p.hp <= 0) {
-          p.hp = Math.max(1, Math.floor((stats.maxHp || p.maxHp) * 0.6)) // Use calculated max HP
+          p.hp = Math.max(1, Math.floor(p.maxHp * 0.6)) // Use player's max HP
           p.gold = Math.max(0, p.gold - Math.min(10, Math.floor(p.level * 2))) // Scale penalty with level
           msg += `. Player was knocked out and revived!`
         }

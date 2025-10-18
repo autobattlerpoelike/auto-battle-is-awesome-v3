@@ -172,60 +172,77 @@ const StoneItem = memo(({
   if (viewMode === 'grid') {
     return (
       <div
-        className={`bg-gray-800 border-2 rounded-lg p-3 cursor-pointer transition-all hover:bg-gray-700 ${
-          isSelected ? 'border-blue-500 bg-blue-900/30' : 'border-gray-600'
+        className={`relative bg-gradient-to-br from-gray-800 to-gray-900 border-2 rounded-xl p-4 cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/20 ${
+          isSelected ? 'border-blue-400 bg-gradient-to-br from-blue-900/40 to-blue-800/40 shadow-lg shadow-blue-500/30' : 'border-gray-600 hover:border-gray-500'
         }`}
         onMouseEnter={onHover ? (e) => onHover(e, stone) : undefined}
         onMouseLeave={onLeave}
         onClick={onClick ? (e) => onClick(e, stone) : undefined}
       >
-        <div className="flex items-center gap-2 mb-2">
+        {/* Rarity indicator */}
+        <div 
+          className="absolute top-2 right-2 w-3 h-3 rounded-full shadow-lg"
+          style={{ backgroundColor: getStoneColor(stone.rarity) }}
+        />
+        
+        <div className="flex items-center gap-3 mb-3">
           <div 
-            className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-lg"
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg"
             style={{ backgroundColor: getStoneColor(stone.rarity) }}
           >
             {getStoneIcon(stone.type)}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-bold text-sm truncate" style={{ color: getStoneColor(stone.rarity) }}>
+            <div className="font-bold text-sm truncate mb-1" style={{ color: getStoneColor(stone.rarity) }}>
               {stone.name}
             </div>
-            <div className="text-xs text-gray-400">
-              Level {stone.level} • {stone.rarity}
+            <div className="text-xs text-gray-400 bg-gray-700/50 px-2 py-1 rounded-lg inline-block">
+              Lv.{stone.level} • {stone.rarity}
             </div>
           </div>
         </div>
         
         {/* Base stats preview */}
-        <div className="text-xs space-y-1 mb-2">
+        <div className="text-xs space-y-1.5 mb-3 bg-gray-700/30 rounded-lg p-2">
           {Object.entries(stone.baseStats).slice(0, 2).map(([stat, value]) => (
             typeof value === 'number' && value > 0 && (
-              <div key={stat} className="text-green-400">
-                +{formatStatValue(stat, value)} {getStatDisplayName(stat)}
+              <div key={stat} className="flex justify-between items-center text-green-400">
+                <span className="text-gray-300">{getStatDisplayName(stat)}</span>
+                <span className="font-medium">+{formatStatValue(stat, value)}</span>
               </div>
             )
           ))}
+          {Object.entries(stone.baseStats).length > 2 && (
+            <div className="text-gray-500 text-center pt-1 border-t border-gray-600">
+              +{Object.entries(stone.baseStats).length - 2} more stats
+            </div>
+          )}
+        </div>
+
+        {/* Value display */}
+        <div className="text-yellow-400 text-xs font-medium mb-3 text-center bg-yellow-900/20 py-1 rounded-lg">
+          💰 {stone.value.toLocaleString()}
         </div>
 
         {/* Action buttons */}
-        <div className="flex gap-1">
+        <div className="flex gap-2">
           <button
             onClick={(e) => {
               e.stopPropagation()
               onEmbed(stone.id)
             }}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs py-1 px-2 rounded transition-colors"
+            className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white text-xs py-2 px-3 rounded-lg transition-all duration-200 font-medium shadow-lg hover:shadow-blue-500/30"
           >
-            Embed
+            ⚡ Embed
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation()
               onRemove(stone.id)
             }}
-            className="bg-red-600 hover:bg-red-700 text-white text-xs py-1 px-2 rounded transition-colors"
+            className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs py-2 px-3 rounded-lg transition-all duration-200 shadow-lg hover:shadow-red-500/30"
           >
-            ✕
+            🗑️
           </button>
         </div>
       </div>
@@ -235,82 +252,94 @@ const StoneItem = memo(({
   // List view
   return (
     <div
-      className={`bg-gray-800 border-2 rounded-lg p-3 cursor-pointer transition-all hover:bg-gray-700 ${
-        isSelected ? 'border-blue-500 bg-blue-900/30' : 'border-gray-600'
+      className={`relative bg-gradient-to-r from-gray-800 to-gray-900 border-2 rounded-xl p-4 cursor-pointer transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10 ${
+        isSelected ? 'border-blue-400 bg-gradient-to-r from-blue-900/40 to-blue-800/40 shadow-lg shadow-blue-500/20' : 'border-gray-600 hover:border-gray-500'
       }`}
       onMouseEnter={onHover ? (e) => onHover(e, stone) : undefined}
       onMouseLeave={onLeave}
       onClick={onClick ? (e) => onClick(e, stone) : undefined}
     >
-      <div className="flex items-center gap-3">
+      {/* Rarity indicator */}
+      <div 
+        className="absolute top-3 right-3 w-3 h-3 rounded-full shadow-lg"
+        style={{ backgroundColor: getStoneColor(stone.rarity) }}
+      />
+      
+      <div className="flex items-center gap-4">
         <div 
-          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-xl"
+          className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg"
           style={{ backgroundColor: getStoneColor(stone.rarity) }}
         >
           {getStoneIcon(stone.type)}
         </div>
         
         <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="font-bold" style={{ color: getStoneColor(stone.rarity) }}>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="font-bold text-lg" style={{ color: getStoneColor(stone.rarity) }}>
               {stone.name}
             </div>
-            <div className="text-xs text-gray-400">
+            <div className="text-xs text-gray-400 bg-gray-700/50 px-2 py-1 rounded-lg">
               Level {stone.level} • {stone.rarity}
             </div>
           </div>
           
           {/* Stats display */}
-          <div className="text-sm space-y-1">
+          <div className="text-sm space-y-1 mb-2">
             {/* Base stats */}
-            {Object.entries(stone.baseStats).map(([stat, value]) => (
-              typeof value === 'number' && value > 0 && (
-                <span key={stat} className="text-green-400 mr-3">
-                  +{formatStatValue(stat, value)} {getStatDisplayName(stat)}
-                </span>
-              )
-            ))}
+            <div className="flex flex-wrap gap-3">
+              {Object.entries(stone.baseStats).map(([stat, value]) => (
+                typeof value === 'number' && value > 0 && (
+                  <span key={stat} className="text-green-400 bg-green-900/20 px-2 py-1 rounded-lg text-xs">
+                    +{formatStatValue(stat, value)} {getStatDisplayName(stat)}
+                  </span>
+                )
+              ))}
+            </div>
             
             {/* Affixes */}
-            {stone.affixes && stone.affixes.map((affix: any, index: number) => (
-              <span key={index} className="text-purple-300 mr-3">
-                {affix.name}: +{formatStatValue(affix.stat, affix.value)} {getStatDisplayName(affix.stat)}
-              </span>
-            ))}
+            {stone.affixes && stone.affixes.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {stone.affixes.map((affix: any, index: number) => (
+                  <span key={index} className="text-purple-300 bg-purple-900/20 px-2 py-1 rounded-lg text-xs">
+                    {affix.name}: +{formatStatValue(affix.stat, affix.value)} {getStatDisplayName(affix.stat)}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           
           {/* Socket compatibility */}
           <div className="flex flex-wrap gap-1 mt-2">
             {stone.socketTypes.map((socketType: string) => (
-              <span key={socketType} className="bg-amber-900/30 text-amber-300 px-2 py-1 rounded text-xs">
-                {socketType}
+              <span key={socketType} className="bg-amber-900/30 text-amber-300 px-2 py-1 rounded-lg text-xs border border-amber-700/50">
+                🔌 {socketType}
               </span>
             ))}
           </div>
         </div>
         
-        <div className="flex flex-col gap-2">
-          <div className="text-yellow-400 text-sm font-medium text-right">
-            💰 {stone.value}
+        <div className="flex flex-col gap-3 items-end">
+          <div className="text-yellow-400 text-sm font-medium bg-yellow-900/20 px-3 py-1 rounded-lg">
+            💰 {stone.value.toLocaleString()}
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-2">
             <button
               onClick={(e) => {
                 e.stopPropagation()
                 onEmbed(stone.id)
               }}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs py-1 px-3 rounded transition-colors"
+              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white text-xs py-2 px-4 rounded-lg transition-all duration-200 font-medium shadow-lg hover:shadow-blue-500/30"
             >
-              Embed
+              ⚡ Embed
             </button>
             <button
               onClick={(e) => {
                 e.stopPropagation()
                 onRemove(stone.id)
               }}
-              className="bg-red-600 hover:bg-red-700 text-white text-xs py-1 px-2 rounded transition-colors"
+              className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs py-2 px-3 rounded-lg transition-all duration-200 shadow-lg hover:shadow-red-500/30"
             >
-              ✕
+              🗑️
             </button>
           </div>
         </div>
@@ -379,8 +408,10 @@ const StonePanel = memo(function StonePanel() {
       }
     })
     
+
+    
     return counts
-  }, [state.player.stones])
+  }, [state.player.stones, activeTab])
 
   // Memoize pagination calculations
   const paginationData = useMemo(() => {
@@ -389,6 +420,8 @@ const StonePanel = memo(function StonePanel() {
     const displayStones = sortedStones.slice(0, maxItems)
     const startIndex = currentPage * itemsPerPage
     const currentItems = displayStones.slice(startIndex, startIndex + itemsPerPage)
+    
+
     const excessItems = sortedStones.length - maxItems
     
     return {
@@ -409,6 +442,11 @@ const StonePanel = memo(function StonePanel() {
     const newStone = generateStone(state.player.level, false)
     actions.addStone(newStone)
   }, [state.player.level, actions])
+
+  // Sell all stones for gold
+  const handleSellAllStones = useCallback(() => {
+    actions.sellAllStones()
+  }, [actions])
 
   const handleEmbedStone = useCallback((equipmentSlot: string, stoneId: string, socketIndex: number) => {
     const equipment = state.player.equipment[equipmentSlot as keyof typeof state.player.equipment]
@@ -435,7 +473,7 @@ const StonePanel = memo(function StonePanel() {
       const { equipment: updatedEquipment, removedStoneId } = removeStone(equipment, socketIndex)
       dispatch({ type: 'UPDATE_EQUIPMENT', payload: { slot: equipmentSlot, equipment: updatedEquipment } })
       if (removedStoneId) {
-        console.log('Removed stone:', removedStoneId)
+    
       }
     } catch (error) {
       console.error('Failed to remove stone:', error)
@@ -448,9 +486,11 @@ const StonePanel = memo(function StonePanel() {
   }, [])
 
   const handleTabChange = useCallback((tab: typeof activeTab) => {
-    setActiveTab(tab)
-    setCurrentPage(0)
-  }, [])
+    if (tab !== activeTab) {
+      setActiveTab(tab)
+      setCurrentPage(0)
+    }
+  }, [activeTab])
 
   const handleStoneEmbed = useCallback((stoneId: string) => {
     setSelectedStone(stoneId)
@@ -507,11 +547,18 @@ const StonePanel = memo(function StonePanel() {
       }
 
       return (
-        <div key={slot} className="bg-gray-800 rounded-lg p-4 mb-4 border border-gray-600">
-          <h3 className="text-white font-bold mb-2 capitalize">{slot}</h3>
-          <p className="text-gray-300 text-sm mb-3">{equipment.name}</p>
+        <div key={slot} className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-5 mb-4 border border-gray-600/50 shadow-lg hover:shadow-xl transition-all duration-300">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center shadow-lg">
+              <span className="text-white font-bold text-lg">⚔️</span>
+            </div>
+            <div>
+              <h3 className="text-white font-bold text-lg capitalize">{slot}</h3>
+              <p className="text-gray-300 text-sm">{equipment.name}</p>
+            </div>
+          </div>
           
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-3">
             {Array.from({ length: equipment.sockets?.maxSockets || 0 }, (_, index) => {
               const stoneId = equipment.sockets?.stones[index]
               const isEmpty = stoneId === null
@@ -519,10 +566,10 @@ const StonePanel = memo(function StonePanel() {
               return (
                 <div
                   key={index}
-                  className={`w-12 h-12 border-2 rounded-lg flex items-center justify-center cursor-pointer transition-colors ${
+                  className={`relative w-14 h-14 border-2 rounded-xl flex items-center justify-center cursor-pointer transition-all duration-300 group ${
                     isEmpty 
-                      ? 'border-gray-600 bg-gray-700 hover:border-gray-500' 
-                      : 'border-amber-500 bg-amber-900 hover:border-amber-400'
+                      ? 'border-gray-500 bg-gray-700/50 hover:border-gray-400 hover:bg-gray-600/50 hover:scale-105' 
+                      : 'border-amber-400 bg-gradient-to-br from-amber-900/50 to-orange-900/50 hover:border-amber-300 hover:scale-105 shadow-lg shadow-amber-500/20'
                   }`}
                   onClick={() => {
                     if (isEmpty && selectedStone) {
@@ -532,14 +579,36 @@ const StonePanel = memo(function StonePanel() {
                     }
                   }}
                 >
+                  {/* Socket indicator */}
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-gray-600 rounded-full flex items-center justify-center">
+                    <span className="text-xs text-gray-300">{index + 1}</span>
+                  </div>
+                  
                   {isEmpty ? (
-                    <span className="text-gray-500 text-xs">+</span>
+                    <div className="flex flex-col items-center">
+                      <span className="text-gray-400 text-2xl group-hover:text-gray-300 transition-colors">+</span>
+                      <span className="text-xs text-gray-500 group-hover:text-gray-400 transition-colors">Empty</span>
+                    </div>
                   ) : (
-                    <span className="text-amber-300 text-lg">💎</span>
+                    <div className="flex flex-col items-center">
+                      <span className="text-amber-300 text-2xl group-hover:text-amber-200 transition-colors">💎</span>
+                      <span className="text-xs text-amber-400 group-hover:text-amber-300 transition-colors">Filled</span>
+                    </div>
                   )}
+                  
+                  {/* Hover effect */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 to-purple-500/0 group-hover:from-blue-500/10 group-hover:to-purple-500/10 rounded-xl transition-all duration-300"></div>
                 </div>
               )
             })}
+          </div>
+          
+          {/* Socket info */}
+          <div className="mt-3 pt-3 border-t border-gray-600/50">
+            <div className="flex justify-between items-center text-xs text-gray-400">
+              <span>Sockets: {equipment.sockets?.stones.filter(s => s !== null).length || 0}/{equipment.sockets?.maxSockets || 0}</span>
+              <span className="text-amber-400">Click to embed/remove</span>
+            </div>
           </div>
         </div>
       )
@@ -563,17 +632,38 @@ const StonePanel = memo(function StonePanel() {
         return false
       }}
     >
-      <div className="flex flex-col h-full bg-gray-900 text-white">
+      <div className="flex flex-col h-full bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
       {/* Header */}
-      <div className="flex justify-between items-center p-4 bg-gray-800/50 border-b border-gray-600">
-        <h2 className="text-2xl font-bold text-white">💎 Enhanced Stone Management</h2>
-        <div className="flex gap-2 items-center">
-          <SmartFilterSystem
-            items={sortedStones}
-            onFilterChange={(filtered) => {
-              // Update filtered stones state if needed
-            }}
-            filterGroups={[
+      <div className="relative overflow-hidden">
+        {/* Background gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-r from-purple-900/20 via-blue-900/20 to-indigo-900/20"></div>
+        <div className="relative flex justify-between items-center p-6 bg-gray-800/80 backdrop-blur-sm border-b border-gray-600/50 shadow-lg">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                <span className="text-2xl">💎</span>
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+                  Stone Management
+                </h2>
+                <p className="text-sm text-gray-400">Enhance your equipment with magical stones</p>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-3 items-center">
+            <div className="bg-gray-700/50 backdrop-blur-sm rounded-lg px-4 py-2 border border-gray-600/50">
+              <div className="text-yellow-400 text-lg font-bold flex items-center gap-2">
+                <span className="text-xl">💰</span>
+                {(state.player.gold && typeof state.player.gold === 'number' && !isNaN(state.player.gold)) ? state.player.gold.toFixed(2) : '0.00'}
+              </div>
+            </div>
+            <SmartFilterSystem
+              items={sortedStones}
+              onFilterChange={(filtered) => {
+                // Update filtered stones state if needed
+              }}
+              filterGroups={[
                {
                  id: 'type',
                  label: 'Stone Type',
@@ -624,6 +714,13 @@ const StonePanel = memo(function StonePanel() {
           >
             ✨ Generate Stone
           </button>
+          <button
+            onClick={handleSellAllStones}
+            className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition-colors text-white font-medium"
+            disabled={state.player.stones.length === 0}
+          >
+            💰 Sell All Stones
+          </button>
         </div>
       </div>
 
@@ -632,7 +729,7 @@ const StonePanel = memo(function StonePanel() {
         <div className="flex gap-2 overflow-x-auto">
           <button
             onClick={() => handleTabChange('all')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap cursor-pointer ${
               activeTab === 'all' 
                 ? 'bg-purple-600 text-white shadow-lg' 
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
@@ -643,33 +740,51 @@ const StonePanel = memo(function StonePanel() {
           {Object.entries(STONE_BASES).map(([stoneType, stoneData]) => (
             <button
               key={stoneType}
-              onClick={() => handleTabChange(stoneType as typeof activeTab)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+              onClick={() => handleTabChange(stoneType as StoneType)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap cursor-pointer ${
                 activeTab === stoneType 
                   ? 'bg-purple-600 text-white shadow-lg' 
                   : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
               }`}
             >
-              {getStoneIcon(stoneType as StoneType)} {stoneData.name} <span className="text-xs opacity-75">({tabCounts[stoneType]})</span>
+              {getStoneIcon(stoneType as StoneType)} {stoneData.name} <span className="text-xs opacity-75">({tabCounts[stoneType as StoneType] || 0})</span>
             </button>
           ))}
         </div>
       </div>
 
+
+
       {/* Stats Bar */}
-      <div className="p-4 bg-gray-700/50 border-b border-gray-600">
+      <div className="px-6 py-4 bg-gray-700/30 backdrop-blur-sm border-b border-gray-600/30">
         <div className="flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div className="text-yellow-400 text-lg font-bold">💰 Gold: {(state.player.gold && typeof state.player.gold === 'number' && !isNaN(state.player.gold)) ? state.player.gold.toFixed(2) : '0.00'}</div>
-            <div className="text-gray-300 text-sm">
-              {activeTab === 'all' ? 'Total Stones' : `${STONE_BASES[activeTab as StoneType]?.name || activeTab}`}: {sortedStones.length}
-              {activeTab !== 'all' && <span className="text-gray-400"> / {state.player.stones?.length || 0} total</span>}
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2 bg-gray-800/50 rounded-lg px-4 py-2 border border-gray-600/50">
+              <span className="text-blue-400 text-lg">📊</span>
+              <div className="text-gray-300 text-sm">
+                <span className="font-medium text-white">
+                  {activeTab === 'all' ? 'Total Stones' : `${STONE_BASES[activeTab as StoneType]?.name || activeTab}`}:
+                </span>
+                <span className="ml-2 text-blue-400 font-bold">{sortedStones.length}</span>
+                {activeTab !== 'all' && (
+                  <span className="text-gray-400 ml-1">/ {state.player.stones?.length || 0} total</span>
+                )}
+              </div>
             </div>
-            <div className="text-gray-300 text-sm">Total Value: {totalValue.toFixed(2)} 💰</div>
+            <div className="flex items-center gap-2 bg-gray-800/50 rounded-lg px-4 py-2 border border-gray-600/50">
+              <span className="text-yellow-400 text-lg">💎</span>
+              <div className="text-gray-300 text-sm">
+                <span className="font-medium text-white">Total Value:</span>
+                <span className="ml-2 text-yellow-400 font-bold">{totalValue.toFixed(2)}</span>
+              </div>
+            </div>
           </div>
           {selectedStone && (
-            <div className="text-blue-400 text-sm font-medium">
-              Selected stone - click on equipment socket to embed
+            <div className="flex items-center gap-2 bg-blue-900/30 border border-blue-500/50 rounded-lg px-4 py-2">
+              <span className="text-blue-400 text-lg">⚡</span>
+              <span className="text-blue-300 text-sm font-medium">
+                Stone selected - click equipment socket to embed
+              </span>
             </div>
           )}
         </div>
@@ -755,13 +870,27 @@ const StonePanel = memo(function StonePanel() {
 
         {/* Equipment Sockets */}
         <div className="w-80 flex flex-col">
-          <h3 className="text-xl font-bold mb-4">Equipment Sockets</h3>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center shadow-lg">
+              <span className="text-white font-bold text-lg">⚔️</span>
+            </div>
+            <div>
+              <h3 className="text-xl font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
+                Equipment Sockets
+              </h3>
+              <p className="text-sm text-gray-400">Embed stones to enhance gear</p>
+            </div>
+          </div>
+          
           <div className="flex-1 overflow-y-auto">
             {renderEquipmentSockets()}
             {renderEquipmentSockets().length === 0 && (
-              <div className="bg-gray-800 rounded-lg p-4 text-center border border-gray-600">
-                <p className="text-gray-400">No equipment with sockets found</p>
-                <p className="text-gray-500 text-sm mt-2">
+              <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 text-center border border-gray-600/50 shadow-lg">
+                <div className="w-16 h-16 bg-gray-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-gray-400 text-2xl">⚔️</span>
+                </div>
+                <p className="text-gray-400 font-medium mb-2">No equipment with sockets found</p>
+                <p className="text-gray-500 text-sm">
                   Equip items with sockets to embed stones
                 </p>
               </div>
@@ -769,39 +898,57 @@ const StonePanel = memo(function StonePanel() {
           </div>
           
           {/* Instructions */}
-          <div className="mt-4 bg-gray-800 rounded-lg p-4 border border-gray-600">
-            <h4 className="text-lg font-bold mb-2">How to Use:</h4>
-            <ul className="text-gray-300 text-sm space-y-1">
-              <li>• Select a stone by clicking "Embed"</li>
-              <li>• Click an empty socket (+) to embed the stone</li>
-              <li>• Click a filled socket (💎) to remove the stone</li>
-              <li>• Stones provide stat bonuses when embedded</li>
+          <div className="mt-4 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 border border-gray-600/50 shadow-lg">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-blue-400 text-lg">💡</span>
+              <h4 className="text-lg font-bold text-white">How to Use</h4>
+            </div>
+            <ul className="text-gray-300 text-sm space-y-2">
+              <li className="flex items-start gap-2">
+                <span className="text-green-400 mt-0.5">•</span>
+                <span>Select a stone by clicking <span className="text-blue-400 font-medium">"⚡ Embed"</span></span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-400 mt-0.5">•</span>
+                <span>Click an empty socket <span className="text-gray-400 font-medium">(+)</span> to embed the stone</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-400 mt-0.5">•</span>
+                <span>Click a filled socket <span className="text-amber-400 font-medium">(💎)</span> to remove the stone</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-400 mt-0.5">•</span>
+                <span>Stones provide <span className="text-purple-400 font-medium">stat bonuses</span> when embedded</span>
+              </li>
             </ul>
           </div>
         </div>
       </div>
       
       {/* Enhanced Tooltip */}
-       {tooltip && (
-         <div
-           style={{
-             position: 'fixed',
-             left: tooltip.position.x,
-             top: tooltip.position.y,
-             zIndex: 1000
-           }}
-         >
-           <EnhancedTooltip
-             type="stone"
-             item={tooltip.stone}
-           >
-             <div />
-           </EnhancedTooltip>
-         </div>
-       )}
+      {tooltip && (
+        <div
+          style={{
+            position: 'fixed',
+            left: tooltip.position.x,
+            top: tooltip.position.y,
+            zIndex: 1000
+          }}
+        >
+          <EnhancedTooltip
+            type="stone"
+            item={tooltip.stone}
+          >
+            <div />
+          </EnhancedTooltip>
+        </div>
+      )}
       </div>
+    </div>
     </DragDropProvider>
   )
 })
+
+StonePanel.displayName = 'StonePanel'
 
 export default StonePanel

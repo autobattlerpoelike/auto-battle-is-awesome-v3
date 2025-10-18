@@ -82,17 +82,8 @@ export function defaultPlayer(): Player {
   const skillGems = MAIN_SKILL_GEMS.map(template => createDefaultSkillGem(template))
   const supportGems = SUPPORT_GEMS.map(template => createDefaultSupportGem(template))
   
-  // Create skill bar with default equipped skills (whirlwind, fireball, lightning_bolt, ice_shard)
+  // Create empty skill bar - no skills equipped by default
   const skillBar = createDefaultSkillBar()
-  
-  // Mark auto-equipped skills as equipped in the skillGems array
-  const autoEquippedSkillIds = ['fireball', 'lightning_bolt', 'ice_shard', 'whirlwind']
-  autoEquippedSkillIds.forEach(skillId => {
-    const skillGem = skillGems.find(gem => gem.id === skillId)
-    if (skillGem) {
-      skillGem.isEquipped = true
-    }
-  })
   
   return {
     level: 10,
@@ -332,9 +323,19 @@ export function calculatePlayerStats(basePlayer: Player): Player {
     player.critChance += totalLuckBonus * 0.005
   }
   
-  // Store calculated stats for reference (equipment-derived stats only)
+  // Store calculated stats for reference (equipment + passive tree stats)
   player.calculatedStats = {
     ...totalEquipmentStats
+  }
+  
+  // Merge passive tree stats into calculatedStats
+  if (passiveTreeStats) {
+    Object.entries(passiveTreeStats).forEach(([stat, value]) => {
+      if (typeof value === 'number') {
+        const currentValue = player.calculatedStats[stat as keyof EquipmentStats] as number || 0
+        player.calculatedStats[stat as keyof EquipmentStats] = currentValue + value
+      }
+    })
   }
   
   // Legacy equipment support

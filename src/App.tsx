@@ -4,7 +4,7 @@ import GameCanvas from './components/GameCanvas'
 import CharacterStatusPanel from './components/CharacterStatusPanel'
 import EquipmentPanel from './components/EquipmentPanel'
 import PassiveTreeBonusesPanel from './components/PassiveTreeBonusesPanel'
-import EnhancedInventoryPanel from './components/EnhancedInventoryPanel'
+import StreamlinedInventoryPanel from './components/StreamlinedInventoryPanel'
 import CombatLogPanel from './components/CombatLogPanel'
 import CombatPanel from './components/CombatPanel'
 import Modal from './components/Modal'
@@ -106,6 +106,19 @@ export default function App() {
     }
   }
 
+  const getModalMaxWidth = () => {
+    switch (activeModal) {
+      case 'stones':
+        return 'max-w-7xl' // Extra large width for Stone Management
+      case 'passiveTree':
+        return 'max-w-6xl' // Large width for Passive Tree
+      case 'equipment':
+        return 'max-w-5xl' // Medium-large width for Equipment
+      default:
+        return 'max-w-4xl' // Default width
+    }
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header onOpenModal={openModal} />
@@ -144,6 +157,7 @@ export default function App() {
         isOpen={activeModal !== null}
         onClose={closeModal}
         title={getModalTitle()}
+        maxWidth={getModalMaxWidth()}
       >
         {renderModalContent()}
       </Modal>
@@ -247,7 +261,7 @@ export default function App() {
               </button>
             </div>
             <div className="flex-1 overflow-auto">
-              <EnhancedInventoryPanel />
+              <StreamlinedInventoryPanel />
             </div>
           </div>
         </div>

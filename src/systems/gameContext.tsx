@@ -112,6 +112,7 @@ type GameAction =
   | { type: 'ALLOCATE_PASSIVE_NODE'; payload: string }
   | { type: 'ADD_STONE'; payload: any }
   | { type: 'REMOVE_STONE'; payload: string }
+  | { type: 'SELL_ALL_STONES' }
   | { type: 'UPDATE_EQUIPMENT'; payload: { slot: string; equipment: Equipment } }
   | { type: 'FORCE_MIGRATE_STONES' }
   | { type: 'UPDATE_CHARACTER_MODEL'; payload: string }
@@ -154,6 +155,7 @@ interface GameActions {
   addStone: (stone: any) => void
   removeStone: (stoneId: string) => void
   removeStoneFromSocket: (equipmentId: string, socketIndex: number) => void
+  sellAllStones: () => void
   forceMigrateStones: () => void
   
   // Character Model Management
@@ -170,10 +172,18 @@ interface GameProviderProps {
   children: ReactNode
 }
 
+// Generate some test inventory items for testing the Enhanced Inventory Panel
+const testInventoryItems = [
+  ...generateLoot(5, false), // Level 5 normal loot
+  ...generateLoot(10, true), // Level 10 boss loot
+  ...generateLoot(15, false), // Level 15 normal loot
+  ...generateLoot(20, true), // Level 20 boss loot
+]
+
 const initialState: GameState = {
   player: calculatePlayerStatsMemoized(defaultPlayer()),
   enemies: [spawnEnemyForLevel(1)],
-  inventory: [],
+  inventory: testInventoryItems, // Add test items for testing
   log: [],
   skills: {},
   activeCombinations: [],
@@ -303,69 +313,84 @@ function reducer(state: GameState, action: GameAction): GameState {
       const currentTime = Date.now()
       const whirlwindSkill = updatedPlayer.skillBar.slots.find((s: any) => s?.id === 'whirlwind')
       
-      // Automatic Whirlwind activation every tick (continuous channeling behavior)
-      if (whirlwindSkill && whirlwindSkill.isUnlocked) {
-        const lastUsed = updatedPlayer.skillCooldowns['whirlwind'] || 0
-        const cooldownTime = whirlwindSkill.scaling.baseCooldown || whirlwindSkill.cooldown
-        
-        // With zero cooldown, Whirlwind can activate every tick for true channeling
-        if (cooldownTime === 0 || currentTime - lastUsed >= cooldownTime) {
-          // Activate Whirlwind automatically
-          updatedPlayer.skillCooldowns['whirlwind'] = currentTime
-          
-          // Calculate Whirlwind area of effect
-          const whirlwindArea = whirlwindSkill.scaling.baseArea! + (whirlwindSkill.level - 1) * whirlwindSkill.scaling.areaPerLevel!
-          const whirlwindRange = whirlwindArea * 30 // Convert area to pixel range (base area 2.5 = ~75 pixel range)
-          
-          // Apply Whirlwind effects only to enemies within range
-          skillLog.push(`ANIM_SKILL|whirlwind|${currentTime}|3000`)
-          const damage = Math.floor(whirlwindSkill.scaling.baseDamage! + (whirlwindSkill.level - 1) * whirlwindSkill.scaling.damagePerLevel!)
-          
-          // Player position (use actual position from state, fallback to default if not set)
-          const playerPosition = state.playerPosition || { x: 150, y: 300 }
-          
-          let enemiesHit = 0
-          enemies.forEach(enemy => {
-            if (enemy.hp > 0 && enemy.position) {
-              // Calculate distance between player and enemy
-              const distance = Math.hypot(
-                enemy.position.x - playerPosition.x,
-                enemy.position.y - playerPosition.y
-              )
-              
-              const isInRange = distance <= whirlwindRange
-              
-              if (isInRange) {
-                enemy.hp = Math.max(0, enemy.hp - damage)
-                skillLog.push(`Whirlwind spins through ${enemy.name} for ${damage} damage! (distance: ${Math.round(distance)})`)
-                enemiesHit++
-              }
-            }
-          })
-          
-          skillLog.push(`🌪️ Whirlwind channels continuously! (${enemiesHit} enemies hit, range: ${Math.round(whirlwindRange)})`)
-        }
-      }
+      // Whirlwind is now manual-only (no automatic activation)
+      // This prevents the continuous AOE animation from interfering with basic attack animations
+      // Whirlwind can still be activated manually through the skill system when needed
       
-      // Basic attacks disabled - combat now relies solely on skills
-      // Auto-skill triggering is now handled by a separate AUTO_SKILLS action
-      
-      // Skip basic attack logic - no simulateCombatTick call
-      // const res = simulateCombatTick(updatedPlayer, target)
+      // Basic attack logic - now enhanced with all character modifiers
+      const res = simulateCombatTick(updatedPlayer, target)
       const newPlayer = { ...updatedPlayer }
       let newEnemies = [...enemies]
-      // newEnemies[targetIndex] = res.enemy
+      newEnemies[targetIndex] = res.enemy
       let newLog = [...skillLog, ...state.log].slice(0,200)
 
-      // Basic attack animations disabled
-      // if (res.didPlayerHit) {
-      //   const w = newPlayer.equipped ?? { type: 'melee', rarity: 'Common' }
-      //   newLog.unshift(`ANIM_PLAYER|${target.id}|${w.type}|${w.rarity}|${res.crit ? 'crit' : 'hit'}|${res.damage}`)
-      // }
+      // Basic attack animations with weapon type detection
+      if (res.didPlayerHit) {
+        // Determine weapon type from equipped weapon or default to melee
+        let weaponType = 'melee'
+        let weaponRarity = 'Common'
+        
+        if (newPlayer.equipped?.weapon) {
+          const weapon = newPlayer.equipped.weapon
+          // Map weapon types to animation types
+          if (weapon.category === 'Weapon') {
+            switch (weapon.subType) {
+              case 'Sword':
+              case 'Axe':
+              case 'Mace':
+              case 'Dagger':
+                weaponType = 'melee'
+                break
+              case 'Bow':
+              case 'Crossbow':
+                weaponType = 'ranged'
+                break
+              case 'Staff':
+              case 'Wand':
+                weaponType = 'magic'
+                break
+              default:
+                weaponType = 'melee'
+            }
+            weaponRarity = weapon.rarity
+          }
+        }
+        
+        // Trigger animation based on weapon type
+        newLog.unshift(`ANIM_PLAYER|${target.id}|${weaponType}|${weaponRarity}|${res.crit ? 'crit' : 'hit'}|${res.damage}`)
+      }
 
-      // if (res.crit && res.didPlayerHit) {
-      //   newLog.unshift(`🔥 Critical Hit! -${res.damage} to ${target.name}`)
-      // }
+      // Enhanced critical hit feedback
+      if (res.crit && res.didPlayerHit) {
+        newLog.unshift(`🔥 Critical Hit! -${res.damage} to ${target.name}`)
+      }
+
+      // Add combat feedback for special effects
+      if (res.didPlayerHit && res.damage > 0) {
+        const effects = []
+        
+        // Check for elemental damage types based on weapon or character stats
+        if (newPlayer.equipped?.weapon?.damageType) {
+          switch (newPlayer.equipped.weapon.damageType) {
+            case 'Fire':
+              effects.push('🔥')
+              break
+            case 'Ice':
+              effects.push('❄️')
+              break
+            case 'Lightning':
+              effects.push('⚡')
+              break
+            case 'Poison':
+              effects.push('☠️')
+              break
+          }
+        }
+        
+        if (effects.length > 0) {
+          newLog.unshift(`${effects.join('')} Elemental damage dealt!`)
+        }
+      }
 
       // Check if any enemies were defeated by skills (like Whirlwind)
       const defeatedEnemies = newEnemies.filter(e => e.hp <= 0)
@@ -394,7 +419,7 @@ function reducer(state: GameState, action: GameAction): GameState {
         newPlayer.xp += totalXpGain
         
         // Implement inventory limit with automatic gold conversion
-        const maxInventoryItems = 10 * 4 // 10 pages * 4 items per page (list view)
+        const maxInventoryItems = 50 * 4 // 50 items per equipment type (weapons, armor, accessories, etc.)
         let newInventory = [...state.inventory]
         
         // Process all loot items
@@ -989,7 +1014,7 @@ function reducer(state: GameState, action: GameAction): GameState {
           updatedPlayer.xp += totalXpGain
           
           // Implement inventory limit with automatic gold conversion
-          const maxInventoryItems = 10 * 4 // 10 pages * 4 items per page (list view)
+          const maxInventoryItems = 50 * 4 // 50 items per equipment type (weapons, armor, accessories, etc.)
           
           // Process all loot items
           let totalGoldFromLoot = 0
@@ -1209,12 +1234,32 @@ function reducer(state: GameState, action: GameAction): GameState {
               console.log(`📝 Adding AOE animation log: ${animLog}`)
               skillLog.push(animLog)
               
-              // For AOE skills, apply damage to all nearby enemies
+              // For AOE skills, apply damage to enemies within skill range
               let enemiesHit = 0
+              const skillRange = getScaledRange(skill)
+              const playerPos = state.playerPosition || { x: 150, y: 300 }
+              
               enemies.forEach((enemy, index) => {
                 if (enemy.hp > 0) {
-                  enemies[index].hp = Math.max(0, enemy.hp - damage)
-                  enemiesHit++
+                  // Get enemy position from state
+                  const enemyPos = state.enemyPositions?.[enemy.id]
+                  
+                  if (enemyPos) {
+                    // Calculate distance between player and enemy
+                    const distance = Math.hypot(
+                      enemyPos.x - playerPos.x,
+                      enemyPos.y - playerPos.y
+                    )
+                    
+                    // Only damage enemies within skill range
+                    if (distance <= skillRange) {
+                      enemies[index].hp = Math.max(0, enemies[index].hp - damage)
+                      enemiesHit++
+                    }
+                  } else {
+                    // If enemy position is missing, skip damage (don't damage enemies without position data)
+                    console.log(`⚠️ Skipping damage for ${enemy.name} - no position data`)
+                  }
                 }
               })
               
@@ -1439,6 +1484,28 @@ function reducer(state: GameState, action: GameAction): GameState {
       }
     }
     
+    case 'SELL_ALL_STONES': {
+      const totalValue = state.player.stones.reduce((sum, stone) => sum + (stone.value || 0), 0)
+      const updatedPlayer = {
+        ...state.player,
+        stones: [],
+        gold: state.player.gold + totalValue
+      }
+      
+      saveState({ 
+        player: updatedPlayer, 
+        inventory: state.inventory, 
+        enemies: state.enemies, 
+        skills: state.skills 
+      })
+      
+      return {
+        ...state,
+        player: updatedPlayer,
+        log: [`Sold all stones for ${totalValue} gold`, ...state.log].slice(0, 200)
+      }
+    }
+    
     case 'UPDATE_EQUIPMENT': {
       const { slot, equipment } = action.payload
       const newEquipment = { ...state.player.equipment }
@@ -1525,14 +1592,15 @@ export function GameProvider({ children }: GameProviderProps) {
     const baseInterval = 1000
     const interval = Math.max(300, Math.round(baseInterval / (1 + quick * 0.05)))
     const tid = setInterval(() => {
-      // Trigger auto-skills once per combat cycle - skill-only combat
+      // Trigger auto-skills once per combat cycle
       dispatch({ type: 'AUTO_SKILLS' })
       
-      // Basic attacks disabled - combat now relies solely on skills
-      // ids.forEach(id => dispatch({ type: 'TICK', payload: { enemyId: id } }))
+      // Basic attacks re-enabled - target all alive enemies
+      const aliveEnemyIds = state.enemies.filter(e => e.hp > 0).map(e => e.id)
+      aliveEnemyIds.forEach(id => dispatch({ type: 'TICK', payload: { enemyId: id } }))
     }, interval)
     return () => clearInterval(tid)
-  }, [state.skills])
+  }, [state.skills, state.enemies])
 
   // Continuous channeling loop for whirlwind - runs independently of combat
   useEffect(() => {
@@ -1612,6 +1680,7 @@ export function GameProvider({ children }: GameProviderProps) {
         dispatch({ type: 'UPDATE_EQUIPMENT', payload: { slot: equipmentId, equipment: updatedEquipment } })
       }
     },
+    sellAllStones: () => dispatch({ type: 'SELL_ALL_STONES' }),
     forceMigrateStones: () => dispatch({ type: 'FORCE_MIGRATE_STONES' }),
     
     // Character Model Management

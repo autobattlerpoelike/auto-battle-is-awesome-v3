@@ -1077,14 +1077,11 @@ export function calculateSkillCooldown(skill: SkillGem): number {
 }
 
 export function createDefaultSkillGem(template: typeof MAIN_SKILL_GEMS[0]): SkillGem {
-  // Auto-equip multiple skills by default to match skillBar initialization
-  const autoEquippedSkills: string[] = ['fireball', 'lightning_bolt', 'ice_shard', 'whirlwind']
-  
   return {
     ...template,
     level: 1,
     isUnlocked: true, // Auto-unlock all skill gems (unlockLevel is 0)
-    isEquipped: autoEquippedSkills.includes(template.id), // Multiple skills equipped by default
+    isEquipped: false, // No skills equipped by default
     supportGems: []
   }
 }
@@ -1098,21 +1095,8 @@ export function createDefaultSupportGem(template: typeof SUPPORT_GEMS[0]): Suppo
 }
 
 export function createDefaultSkillBar(): SkillBar {
-  // Create skill bar with multiple skills equipped for better auto-combat experience
+  // Create empty skill bar - no skills equipped by default
   const slots = new Array(6).fill(null)
-  
-  // Auto-equip multiple skills for engaging combat
-  const defaultSkillIds = ['fireball', 'lightning_bolt', 'ice_shard', 'whirlwind']
-  
-  defaultSkillIds.forEach((skillId, index) => {
-    const skillTemplate = MAIN_SKILL_GEMS.find(template => template.id === skillId)
-    if (skillTemplate && index < slots.length) {
-      slots[index] = {
-        ...createDefaultSkillGem(skillTemplate),
-        isEquipped: true
-      }
-    }
-  })
   
   return {
     slots,

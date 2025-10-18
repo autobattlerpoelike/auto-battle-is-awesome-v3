@@ -191,7 +191,12 @@ export default function EnhancedInventoryPanel() {
   // Initialize filtered items with inventory items
   const [filteredItems, setFilteredItems] = useState<any[]>([])
 
-  // Sync filtered items with inventory items when inventory changes
+  // Memoized callback to prevent infinite re-renders
+  const handleFilterChange = useCallback((filtered: any[]) => {
+    setFilteredItems(filtered)
+  }, [])
+
+  // Sync filteredItems with inventoryItems when inventory changes
   useEffect(() => {
     setFilteredItems(inventoryItems)
   }, [inventoryItems])
@@ -579,7 +584,7 @@ export default function EnhancedInventoryPanel() {
           <SmartFilterSystem
             items={inventoryItems}
             filterGroups={filterGroups}
-            onFilterChange={setFilteredItems}
+            onFilterChange={handleFilterChange}
             showSearch={true}
             showSort={true}
           />

@@ -52,17 +52,14 @@ function convertEquipmentToLegacyFormat(equipment: Equipment) {
     val: affix.value
   }))
   
-  // Determine type for legacy compatibility
-  const isRanged = ['bow', 'crossbow'].includes(equipment.type as string)
-  const legacyType = isRanged ? 'ranged' : 'melee'
-  
   // Populate pooled object
   Object.assign(legacyItem, {
     // Preserve all new equipment properties at the top level
     ...equipment,
     // Add legacy properties for backward compatibility
     power,
-    type: legacyType, // Legacy type for old systems
+    // Keep the specific equipment type (sword, bow, chest, etc.) for filtering
+    // Don't override with generic 'ranged'/'melee' types
     element: equipment.damageType || 'physical',
     extras,
     rarityColor: getEquipmentColor(equipment.rarity),

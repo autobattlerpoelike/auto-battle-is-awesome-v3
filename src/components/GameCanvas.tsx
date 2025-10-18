@@ -217,19 +217,33 @@ const GameCanvas = React.memo(function GameCanvas() {
     actions.updateEnemyPositions(enemyPositions)
   }, [enemyPositions, actions])
 
-  // Debug toggle for F1 key
+  // Keyboard state for 8-directional movement
+  const [keys, setKeys] = useState<Record<string, boolean>>({})
+
+  // Enhanced keyboard handling for movement and debug
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase()
       if (key === 'f1') {
         setDebugAOE(prev => !prev)
+      } else if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+        setKeys(prev => ({ ...prev, [key]: true }))
+      }
+    }
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase()
+      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+        setKeys(prev => ({ ...prev, [key]: false }))
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
     
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
     }
   }, [])
 
@@ -271,7 +285,26 @@ const GameCanvas = React.memo(function GameCanvas() {
         const id = parts[1], wtype = parts[2], wr = parts[3], critFlag = parts[4], dmg = Math.floor(Number(parts[5] || 0))
         const pos = enemyPositions[id]; const color = rarityColor(wr)
         if (wtype === 'melee') {
-          setEffects(s => [...s, { kind:'slash', x: pos?.x||300, y: pos?.y||200, t: Date.now(), ttl: 400, angle: Math.random()*Math.PI - Math.PI/2, color }])
+          // Use player facing direction for forward-facing slash
+          const directionAngle = playerFacingAngle
+          
+          // Create slash effect with 20px separation from player model edge, facing forward
+          const playerRadius = 16 // Player model radius
+          const slashSeparation = 20 // 20px separation from player model edge
+          const slashDistance = playerRadius + slashSeparation // Total distance: 36px
+          const slashX = playerPos.x + Math.cos(directionAngle) * slashDistance
+          const slashY = playerPos.y + Math.sin(directionAngle) * slashDistance
+          
+          setEffects(s => [...s, { 
+            kind:'slash', 
+            x: slashX, 
+            y: slashY, 
+            t: Date.now(), 
+            ttl: 400, // Shorter duration for cleaner effect
+            angle: directionAngle, 
+            color,
+            size: 60 // Appropriate size for arc effect
+          }])
         } else if (wtype === 'ranged') {
           if (pos) {
             const dirx = pos.x - playerPos.x, diry = pos.y - playerPos.y, d = Math.hypot(dirx,diry)||1
@@ -735,8 +768,39 @@ const GameCanvas = React.memo(function GameCanvas() {
       
 
 
-      // Smart AI movement system with ranged combat support
+      // Enhanced movement system: 8-directional player control + AI movement
       const moveSpeed = whirlwindState.active ? 3.5 : 2.2 // Faster movement during Whirlwind
+      
+      // Calculate 8-directional player input movement
+      let playerInputMovement = { x: 0, y: 0 }
+      let hasPlayerInput = false
+      
+      // Check WASD and arrow keys for 8-directional movement
+      if (keys.w || keys.arrowup) {
+        playerInputMovement.y -= 1
+        hasPlayerInput = true
+      }
+      if (keys.s || keys.arrowdown) {
+        playerInputMovement.y += 1
+        hasPlayerInput = true
+      }
+      if (keys.a || keys.arrowleft) {
+        playerInputMovement.x -= 1
+        hasPlayerInput = true
+      }
+      if (keys.d || keys.arrowright) {
+        playerInputMovement.x += 1
+        hasPlayerInput = true
+      }
+      
+      // Normalize diagonal movement to maintain consistent speed
+      if (hasPlayerInput) {
+        const magnitude = Math.sqrt(playerInputMovement.x * playerInputMovement.x + playerInputMovement.y * playerInputMovement.y)
+        if (magnitude > 0) {
+          playerInputMovement.x = (playerInputMovement.x / magnitude) * moveSpeed
+          playerInputMovement.y = (playerInputMovement.y / magnitude) * moveSpeed
+        }
+      }
       
       if (state.enemies.length > 0) {
         // Find nearest enemy
@@ -950,17 +1014,58 @@ const GameCanvas = React.memo(function GameCanvas() {
             }
           }
           
-          // Always face the nearest enemy
+          // Always face the nearest enemy (preserve auto-battle targeting)
           const newFacingAngle = Math.atan2(dy, dx)
           setPlayerFacingAngle(newFacingAngle)
           
           // Removed idle animation during combat to prevent convulsing
         }
       } else {
-        // No enemies, idle movement animation
-        newPlayerPos = {
-          x: playerPos.x + Math.sin(now / 2000) * 0.3,
-          y: playerPos.y + Math.cos(now / 3000) * 0.2
+        // No enemies, idle movement animation (only if no player input)
+        if (!hasPlayerInput) {
+          newPlayerPos = {
+            x: playerPos.x + Math.sin(now / 2000) * 0.3,
+            y: playerPos.y + Math.cos(now / 3000) * 0.2
+          }
+        }
+      }
+      
+      // Apply player input movement (works with or without enemies)
+      if (hasPlayerInput) {
+        const playerControlledPos = {
+          x: playerPos.x + playerInputMovement.x,
+          y: playerPos.y + playerInputMovement.y
+        }
+        
+        // Check collision with enemies for player movement
+        let canMovePlayer = true
+        state.enemies.forEach(e => {
+          const enemyPos = enemyPositions[e.id]
+          if (enemyPos && e.hp > 0) {
+            let enemyRadius = 12
+            if (e.type === 'melee') {
+              enemyRadius = 12 + e.level * 0.8
+            } else if (e.type === 'ranged') {
+              enemyRadius = 10 + e.level * 0.6
+            } else {
+              enemyRadius = 14 + e.level * 1.0
+            }
+            
+            if (checkCollision(playerControlledPos, enemyPos, 18, enemyRadius + 2)) {
+              canMovePlayer = false
+            }
+          }
+        })
+        
+        // Apply player movement if valid
+        if (canMovePlayer && isWithinBounds(playerControlledPos, 18)) {
+          newPlayerPos = playerControlledPos
+          
+          // Update facing direction based on movement when no enemies (preserve auto-targeting with enemies)
+          if (state.enemies.length === 0) {
+            const movementAngle = Math.atan2(playerInputMovement.y, playerInputMovement.x)
+            setPlayerFacingAngle(movementAngle)
+          }
         }
       }
 
@@ -1382,56 +1487,36 @@ const GameCanvas = React.memo(function GameCanvas() {
       ctx.shadowBlur = 8 * camera.zoom;
     }
     
-    // Draw circular aura effect beneath player
+    // Draw subtle aura effect beneath player (simplified to avoid double model appearance)
     const time = Date.now() * 0.003;
-    const auraRadius = 25 * camera.zoom;
-    const auraPulse = Math.sin(time * 1.5) * 0.2 + 0.8; // Pulsing effect
-    const auraRotation = time * 0.5; // Slow rotation
+    const auraRadius = 20 * camera.zoom;
+    const auraPulse = Math.sin(time * 1.2) * 0.15 + 0.85; // Gentler pulsing
     
-    // Draw multiple aura rings for depth
-    for (let i = 0; i < 3; i++) {
-      const ringRadius = auraRadius * (0.6 + i * 0.2) * auraPulse;
-      const alpha = (0.15 - i * 0.03) * auraPulse;
-      
-      // Create gradient for each ring
-      const gradient = ctx.createRadialGradient(
-        playerScreenPos.x, playerScreenPos.y + 10 * camera.zoom,
-        0,
-        playerScreenPos.x, playerScreenPos.y + 10 * camera.zoom,
-        ringRadius
-      );
-      
-      if (whirlwindState.active) {
-        gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha * 0.8})`);
-        gradient.addColorStop(0.7, `rgba(200, 200, 255, ${alpha * 0.4})`);
-        gradient.addColorStop(1, `rgba(255, 255, 255, 0)`);
-      } else {
-        gradient.addColorStop(0, `rgba(100, 150, 255, ${alpha})`);
-        gradient.addColorStop(0.7, `rgba(50, 100, 200, ${alpha * 0.6})`);
-        gradient.addColorStop(1, `rgba(100, 150, 255, 0)`);
-      }
-      
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(playerScreenPos.x, playerScreenPos.y + 10 * camera.zoom, ringRadius, 0, Math.PI * 2);
-      ctx.fill();
+    // Draw single subtle aura ring
+    const alpha = 0.08 * auraPulse; // Much more subtle
+    
+    // Create gradient for the aura
+    const gradient = ctx.createRadialGradient(
+      playerScreenPos.x, playerScreenPos.y + 8 * camera.zoom,
+      0,
+      playerScreenPos.x, playerScreenPos.y + 8 * camera.zoom,
+      auraRadius
+    );
+    
+    if (whirlwindState.active) {
+      gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha * 1.5})`);
+      gradient.addColorStop(0.8, `rgba(200, 200, 255, ${alpha * 0.5})`);
+      gradient.addColorStop(1, `rgba(255, 255, 255, 0)`);
+    } else {
+      gradient.addColorStop(0, `rgba(100, 150, 255, ${alpha})`);
+      gradient.addColorStop(0.8, `rgba(50, 100, 200, ${alpha * 0.3})`);
+      gradient.addColorStop(1, `rgba(100, 150, 255, 0)`);
     }
     
-    // Draw rotating energy particles around the aura
-    for (let i = 0; i < 8; i++) {
-      const angle = auraRotation + (i * Math.PI * 2) / 8;
-      const particleRadius = auraRadius * 0.8;
-      const particleX = playerScreenPos.x + Math.cos(angle) * particleRadius;
-      const particleY = playerScreenPos.y + 10 * camera.zoom + Math.sin(angle) * particleRadius;
-      const particleSize = 2 * camera.zoom * auraPulse;
-      
-      ctx.fillStyle = whirlwindState.active 
-        ? `rgba(255, 255, 255, ${0.6 * auraPulse})` 
-        : `rgba(150, 200, 255, ${0.8 * auraPulse})`;
-      ctx.beginPath();
-      ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(playerScreenPos.x, playerScreenPos.y + 8 * camera.zoom, auraRadius, 0, Math.PI * 2);
+    ctx.fill();
 
     // Draw simple player character
     const playerRadius = 16;
@@ -1448,104 +1533,113 @@ const GameCanvas = React.memo(function GameCanvas() {
     ctx.arc(playerScreenPos.x, playerScreenPos.y + animationOffset, 4 * camera.zoom, 0, Math.PI * 2);
     ctx.fill();
     
-    // Add simple breathing animation
-    const pulse = 1 + Math.sin(time * 0.003) * 0.05;
-    ctx.save();
-    ctx.translate(playerScreenPos.x, playerScreenPos.y + animationOffset);
-    ctx.scale(pulse, pulse);
-    ctx.translate(-playerScreenPos.x, -(playerScreenPos.y + animationOffset));
-    
-    // Player level indicator
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `${12 * camera.zoom}px Arial`;
-    ctx.textAlign = 'center';
-    ctx.fillText(`Lv.${state.player.level}`, playerScreenPos.x, playerScreenPos.y + animationOffset - (playerRadius + 8) * camera.zoom);
-    
-    ctx.restore();
+    // Removed breathing animation to eliminate flashing effect
+    // Level label is now handled by the drawLabel function below to avoid duplication
     
     ctx.restore();
 
-    // Draw transparent cone-shaped facing direction indicator
+    // Draw enhanced arc-shaped facing direction indicator
     if (state.enemies.length > 0) {
       ctx.save();
       
-      // Cone properties
-      const coneLength = 40 * camera.zoom;
-      const coneWidth = 30 * camera.zoom;
-      const coneAlpha = 0.3 + Math.sin(time * 2) * 0.1; // Subtle pulsing
+      // Arc properties
+      const playerRadius = 16; // Player model radius
+      const arcDistance = 20; // 20px separation from player model edge
+      const arcRadius = (playerRadius + arcDistance) * camera.zoom;
+      const arcSpread = Math.PI / 3; // 60 degrees spread (π/3 radians)
+      const arcAlpha = 0.7 + Math.sin(time * 2.5) * 0.2; // Enhanced pulsing
       
-      // Calculate cone vertices
-      const coneStartX = playerScreenPos.x;
-      const coneStartY = playerScreenPos.y + animationOffset;
+      // Calculate arc center
+      const arcCenterX = playerScreenPos.x;
+      const arcCenterY = playerScreenPos.y + animationOffset;
       
-      // Cone tip
-      const coneTipX = coneStartX + Math.cos(playerFacingAngle) * coneLength;
-      const coneTipY = coneStartY + Math.sin(playerFacingAngle) * coneLength;
+      // Arc angles
+      const startAngle = playerFacingAngle - arcSpread / 2;
+      const endAngle = playerFacingAngle + arcSpread / 2;
       
-      // Cone base corners
-      const baseAngle1 = playerFacingAngle - Math.PI/6; // 30 degrees spread
-      const baseAngle2 = playerFacingAngle + Math.PI/6;
-      
-      const baseDistance = 15 * camera.zoom;
-      const base1X = coneStartX + Math.cos(baseAngle1) * baseDistance;
-      const base1Y = coneStartY + Math.sin(baseAngle1) * baseDistance;
-      const base2X = coneStartX + Math.cos(baseAngle2) * baseDistance;
-      const base2Y = coneStartY + Math.sin(baseAngle2) * baseDistance;
-      
-      // Create gradient for cone
-      const gradient = ctx.createLinearGradient(
-        coneStartX, coneStartY,
-        coneTipX, coneTipY
+      // Create radial gradient for arc
+      const gradient = ctx.createRadialGradient(
+        arcCenterX, arcCenterY, arcRadius * 0.8,
+        arcCenterX, arcCenterY, arcRadius * 1.2
       );
       
       if (whirlwindState.active) {
-        gradient.addColorStop(0, `rgba(255, 255, 255, ${coneAlpha * 0.8})`);
-        gradient.addColorStop(0.5, `rgba(200, 200, 255, ${coneAlpha * 0.6})`);
-        gradient.addColorStop(1, `rgba(255, 255, 255, ${coneAlpha * 0.3})`);
+        gradient.addColorStop(0, `rgba(255, 255, 255, ${arcAlpha * 0.9})`);
+        gradient.addColorStop(0.5, `rgba(200, 200, 255, ${arcAlpha * 0.7})`);
+        gradient.addColorStop(1, `rgba(255, 255, 255, ${arcAlpha * 0.3})`);
       } else {
-        gradient.addColorStop(0, `rgba(100, 150, 255, ${coneAlpha * 0.6})`);
-        gradient.addColorStop(0.5, `rgba(150, 200, 255, ${coneAlpha * 0.8})`);
-        gradient.addColorStop(1, `rgba(200, 220, 255, ${coneAlpha * 0.4})`);
+        gradient.addColorStop(0, `rgba(100, 200, 255, ${arcAlpha * 0.8})`);
+        gradient.addColorStop(0.5, `rgba(150, 220, 255, ${arcAlpha * 0.9})`);
+        gradient.addColorStop(1, `rgba(200, 240, 255, ${arcAlpha * 0.4})`);
       }
       
-      // Draw the cone
-      ctx.fillStyle = gradient;
+      // Draw the main arc
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = 6 * camera.zoom;
+      ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(base1X, base1Y);
-      ctx.lineTo(coneTipX, coneTipY);
-      ctx.lineTo(base2X, base2Y);
-      ctx.closePath();
-      ctx.fill();
-      
-      // Add subtle border to cone
-      ctx.strokeStyle = whirlwindState.active 
-        ? `rgba(255, 255, 255, ${coneAlpha * 0.5})` 
-        : `rgba(150, 200, 255, ${coneAlpha * 0.7})`;
-      ctx.lineWidth = 1 * camera.zoom;
+      ctx.arc(arcCenterX, arcCenterY, arcRadius, startAngle, endAngle);
       ctx.stroke();
       
-      // Add small energy particles along cone edges for extra effect
-      for (let i = 0; i < 3; i++) {
-        const t = (i + 1) / 4; // Position along cone edge
-        const edge1X = base1X + (coneTipX - base1X) * t;
-        const edge1Y = base1Y + (coneTipY - base1Y) * t;
-        const edge2X = base2X + (coneTipX - base2X) * t;
-        const edge2Y = base2Y + (coneTipY - base2Y) * t;
+      // Add inner glow arc
+      ctx.strokeStyle = whirlwindState.active 
+        ? `rgba(255, 255, 255, ${arcAlpha * 0.6})` 
+        : `rgba(180, 230, 255, ${arcAlpha * 0.7})`;
+      ctx.lineWidth = 3 * camera.zoom;
+      ctx.beginPath();
+      ctx.arc(arcCenterX, arcCenterY, arcRadius, startAngle, endAngle);
+      ctx.stroke();
+      
+      // Add directional arrow at the center of the arc
+      const arrowLength = 8 * camera.zoom;
+      const arrowX = arcCenterX + Math.cos(playerFacingAngle) * arcRadius;
+      const arrowY = arcCenterY + Math.sin(playerFacingAngle) * arcRadius;
+      
+      // Arrow tip
+      const arrowTipX = arrowX + Math.cos(playerFacingAngle) * arrowLength;
+      const arrowTipY = arrowY + Math.sin(playerFacingAngle) * arrowLength;
+      
+      // Arrow wings
+      const wingAngle = Math.PI / 6; // 30 degrees
+      const wingLength = arrowLength * 0.6;
+      const leftWingX = arrowX + Math.cos(playerFacingAngle - wingAngle) * wingLength;
+      const leftWingY = arrowY + Math.sin(playerFacingAngle - wingAngle) * wingLength;
+      const rightWingX = arrowX + Math.cos(playerFacingAngle + wingAngle) * wingLength;
+      const rightWingY = arrowY + Math.sin(playerFacingAngle + wingAngle) * wingLength;
+      
+      // Draw arrow
+      ctx.fillStyle = whirlwindState.active 
+        ? `rgba(255, 255, 255, ${arcAlpha * 0.9})` 
+        : `rgba(255, 255, 255, ${arcAlpha * 0.8})`;
+      ctx.strokeStyle = whirlwindState.active 
+        ? `rgba(100, 100, 255, ${arcAlpha * 0.8})` 
+        : `rgba(50, 100, 200, ${arcAlpha * 0.9})`;
+      ctx.lineWidth = 2 * camera.zoom;
+      
+      ctx.beginPath();
+      ctx.moveTo(arrowTipX, arrowTipY);
+      ctx.lineTo(leftWingX, leftWingY);
+      ctx.lineTo(rightWingX, rightWingY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      
+      // Add subtle energy particles along the arc
+      const particleCount = 5;
+      for (let i = 0; i < particleCount; i++) {
+        const particleAngle = startAngle + (endAngle - startAngle) * (i / (particleCount - 1));
+        const particleX = arcCenterX + Math.cos(particleAngle) * arcRadius;
+        const particleY = arcCenterY + Math.sin(particleAngle) * arcRadius;
         
-        const particleSize = (1 + Math.sin(time * 3 + i)) * camera.zoom;
+        const particleSize = (1.5 + Math.sin(time * 4 + i * 0.8)) * camera.zoom;
+        const particleAlpha = arcAlpha * (0.6 + Math.sin(time * 3 + i * 1.2) * 0.3);
         
         ctx.fillStyle = whirlwindState.active 
-          ? `rgba(255, 255, 255, ${coneAlpha * 0.8})` 
-          : `rgba(200, 220, 255, ${coneAlpha})`;
+          ? `rgba(255, 255, 255, ${particleAlpha})` 
+          : `rgba(200, 230, 255, ${particleAlpha})`;
         
-        // Particles on left edge
         ctx.beginPath();
-        ctx.arc(edge1X, edge1Y, particleSize, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Particles on right edge
-        ctx.beginPath();
-        ctx.arc(edge2X, edge2Y, particleSize, 0, Math.PI * 2);
+        ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
         ctx.fill();
       }
       
@@ -1586,9 +1680,66 @@ const GameCanvas = React.memo(function GameCanvas() {
         playerScreenPos.y + animationOffset - scaledPlayerRadius - 8 * camera.zoom
       )
       
-      // 2. Draw Skill Ranges for all equipped skills
+      // 2. Draw Basic Attack Range (melee range)
+      const basicAttackRange = 80 // Default melee range from GameCanvas movement logic
+      const scaledBasicAttackRange = basicAttackRange * camera.zoom
+      
+      ctx.globalAlpha = 0.35
+      ctx.strokeStyle = '#ffaa00' // Orange for basic attack range
+      ctx.lineWidth = 3 * camera.zoom
+      ctx.setLineDash([6 * camera.zoom, 3 * camera.zoom]) // Medium dashed line
+      
+      ctx.beginPath()
+      ctx.arc(playerScreenPos.x, playerScreenPos.y + animationOffset, scaledBasicAttackRange, 0, Math.PI * 2)
+      ctx.stroke()
+      
+      // Basic attack range label
+      ctx.globalAlpha = 0.9
+      ctx.fillStyle = '#ffaa00'
+      ctx.font = `${11 * camera.zoom}px Arial`
+      ctx.textAlign = 'center'
+      ctx.fillText(
+        `Basic Attack: ${basicAttackRange}px`, 
+        playerScreenPos.x, 
+        playerScreenPos.y + animationOffset + scaledBasicAttackRange + 15 * camera.zoom
+      )
+
+      // Compass Direction Indicators (N, S, E, W) at edge of basic attack range
+      ctx.globalAlpha = 0.8
+      ctx.fillStyle = '#ffffff'
+      ctx.strokeStyle = '#000000'
+      ctx.lineWidth = 2 * camera.zoom
+      ctx.font = `bold ${14 * camera.zoom}px Arial`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      
+      // North (top)
+      const northX = playerScreenPos.x
+      const northY = playerScreenPos.y + animationOffset - scaledBasicAttackRange
+      ctx.strokeText('N', northX, northY)
+      ctx.fillText('N', northX, northY)
+      
+      // South (bottom)
+      const southX = playerScreenPos.x
+      const southY = playerScreenPos.y + animationOffset + scaledBasicAttackRange
+      ctx.strokeText('S', southX, southY)
+      ctx.fillText('S', southX, southY)
+      
+      // East (right)
+      const eastX = playerScreenPos.x + scaledBasicAttackRange
+      const eastY = playerScreenPos.y + animationOffset
+      ctx.strokeText('E', eastX, eastY)
+      ctx.fillText('E', eastX, eastY)
+      
+      // West (left)
+      const westX = playerScreenPos.x - scaledBasicAttackRange
+      const westY = playerScreenPos.y + animationOffset
+      ctx.strokeText('W', westX, westY)
+      ctx.fillText('W', westX, westY)
+
+      // 3. Draw Skill Ranges for all equipped skills
       const equippedSkills = state.player.skillBar.slots.filter((s: any) => s !== null)
-      let skillOffset = 0
+      let skillOffset = 1 // Start at 1 to account for basic attack label
       
       equippedSkills.forEach((skill: any, index: number) => {
         if (skill && skill.scaling) {
@@ -1687,17 +1838,21 @@ const GameCanvas = React.memo(function GameCanvas() {
       ctx.fillStyle = '#ff4444'
       ctx.fillText('● Player Collision (16px)', 10 * camera.zoom, legendY)
       
+      // Basic attack range legend
+      ctx.fillStyle = '#ffaa00'
+      ctx.fillText('● Basic Attack Range (80px)', 10 * camera.zoom, legendY + legendSpacing)
+      
       // AOE skills legend
       ctx.fillStyle = '#00ff00'
-      ctx.fillText('● AOE Skills', 10 * camera.zoom, legendY + legendSpacing)
+      ctx.fillText('● AOE Skills', 10 * camera.zoom, legendY + legendSpacing * 2)
       
       // Ranged skills legend
       ctx.fillStyle = '#4488ff'
-      ctx.fillText('● Ranged Skills', 10 * camera.zoom, legendY + legendSpacing * 2)
+      ctx.fillText('● Ranged Skills', 10 * camera.zoom, legendY + legendSpacing * 3)
       
       // Projectile skills legend
       ctx.fillStyle = '#ff8844'
-      ctx.fillText('● Projectile Skills', 10 * camera.zoom, legendY + legendSpacing * 3)
+      ctx.fillText('● Projectile Skills', 10 * camera.zoom, legendY + legendSpacing * 4)
       
       ctx.setLineDash([]) // Reset line dash
       ctx.restore()
@@ -1892,54 +2047,48 @@ const GameCanvas = React.memo(function GameCanvas() {
         ctx.restore();
       } else if (e.kind === 'slash') {
         ctx.save();
-        ctx.globalAlpha = (1 - progress) * 0.9;
+        ctx.globalAlpha = (1 - progress) * 0.8;
         
         const angle = e.angle || 0;
-        const length = (e.size || 30) * camera.zoom;
-        const thickness = 4 * camera.zoom * (1 - progress * 0.5);
+        const arcLength = (e.size || 40) * camera.zoom;
+        const thickness = 6 * camera.zoom;
         
-        // Create animated slash that grows and fades
+        // Simple arc animation - grows from center outward
         const animProgress = Math.sin(progress * Math.PI);
-        const currentLength = length * animProgress;
+        const currentArcLength = arcLength * animProgress;
         
-        const startX = effectScreenPos.x - Math.cos(angle) * currentLength / 2;
-        const startY = effectScreenPos.y - Math.sin(angle) * currentLength / 2;
-        const endX = effectScreenPos.x + Math.cos(angle) * currentLength / 2;
-        const endY = effectScreenPos.y + Math.sin(angle) * currentLength / 2;
+        // Create a slashing arc (90 degree arc)
+        const arcSpan = Math.PI / 2; // 90 degrees
+        const startAngle = angle - arcSpan / 2;
+        const endAngle = angle + arcSpan / 2;
         
-        // Draw main slash
+        // Draw the main slashing arc
         ctx.strokeStyle = e.color;
         ctx.lineWidth = thickness;
         ctx.lineCap = 'round';
+        
         ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(endX, endY);
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, currentArcLength, startAngle, endAngle);
         ctx.stroke();
         
-        // Add bright inner slash
+        // Add bright inner arc
         ctx.globalAlpha = (1 - progress) * 0.6;
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = thickness * 0.4;
         ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(endX, endY);
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, currentArcLength, startAngle, endAngle);
         ctx.stroke();
         
-        // Add sparks at the ends
-        if (progress < 0.7) {
-          ctx.globalAlpha = (1 - progress) * 0.8;
-          ctx.fillStyle = e.color;
-          
-          // Spark at start
-          ctx.beginPath();
-          ctx.arc(startX, startY, 2 * camera.zoom, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Spark at end
-          ctx.beginPath();
-          ctx.arc(endX, endY, 2 * camera.zoom, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        // Add subtle glow
+        ctx.globalAlpha = (1 - progress) * 0.3;
+        ctx.shadowBlur = 10 * camera.zoom;
+        ctx.shadowColor = e.color;
+        ctx.strokeStyle = e.color;
+        ctx.lineWidth = thickness * 1.2;
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, currentArcLength, startAngle, endAngle);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
         
         ctx.restore();
       } else if (e.kind === 'explosion') {

@@ -5,9 +5,10 @@ interface ModalProps {
   onClose: () => void
   title: string
   children: React.ReactNode
+  maxWidth?: string
 }
 
-export default function Modal({ isOpen, onClose, title, children }: ModalProps) {
+export default function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-4xl' }: ModalProps) {
   // Handle escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -38,7 +39,7 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
       {/* Modal */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-zoom-in">
         <div 
-          className="bg-gray-900 rounded-xl shadow-2xl border border-gray-700 max-w-4xl w-full max-h-[90vh] overflow-hidden"
+          className={`bg-gray-900 rounded-xl shadow-2xl border border-gray-700 ${maxWidth} w-full max-h-[90vh] overflow-hidden`}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
