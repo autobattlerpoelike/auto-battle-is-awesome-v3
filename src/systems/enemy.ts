@@ -1,4 +1,4 @@
-export type EnemyType = 'melee' | 'ranged' | 'caster' | 'tank' | 'assassin' | 'boss' | 'beast' | 'undead' | 'elemental' | 'demon' | 'construct'
+export type EnemyType = 'melee' | 'ranged' | 'caster' | 'tank' | 'assassin' | 'boss' | 'beast' | 'undead' | 'elemental' | 'demon' | 'construct' | 'training_dummy'
 export type SpecialAbility = 'berserker' | 'precise' | 'regeneration' | 'shield' | 'poison' | 'freeze' | 'lightning' | 'summon'
 
 export interface Position {
@@ -34,7 +34,8 @@ const enemyNames = {
   undead: ['Zombie', 'Wraith', 'Skeleton Mage', 'Banshee', 'Death Knight'],
   elemental: ['Fire Elemental', 'Ice Elemental', 'Lightning Elemental', 'Earth Elemental', 'Wind Elemental'],
   demon: ['Imp', 'Hellhound', 'Succubus', 'Balrog', 'Pit Lord'],
-  construct: ['Clockwork Golem', 'Crystal Guardian', 'Steam Automaton', 'Arcane Sentinel', 'War Machine']
+  construct: ['Clockwork Golem', 'Crystal Guardian', 'Steam Automaton', 'Arcane Sentinel', 'War Machine'],
+  training_dummy: ['Training Dummy', 'Practice Target', 'Combat Dummy', 'Test Target', 'Sparring Dummy']
 }
 
 const specialAbilities: SpecialAbility[] = ['berserker', 'precise', 'regeneration', 'shield', 'poison', 'freeze', 'lightning']
@@ -142,6 +143,10 @@ export function spawnEnemyForLevel(level: number, kind?: EnemyType): Enemy {
       baseHp = Math.floor(baseHp * 1.6)
       armor = Math.floor(level * 0.4)
       break
+    case 'training_dummy':
+      baseHp = Math.floor(baseHp * 2.0) // High HP for testing
+      armor = 0 // No armor for easy testing
+      break
   }
   
   const specialAbility = getSpecialAbility(type, isBoss)
@@ -178,6 +183,29 @@ export function getEnemyTypeColor(type: EnemyType): string {
     case 'elemental': return 'text-cyan-400'
     case 'demon': return 'text-red-600'
     case 'construct': return 'text-amber-400'
+    case 'training_dummy': return 'text-pink-400'
     default: return 'text-white'
   }
+}
+
+export function spawnTrainingDummy(level: number = 1): Enemy {
+  const baseHp = Math.floor((25 + level * 12) * 40.0) // Very high HP for extended testing (20x more durable)
+  const name = getRandomName('training_dummy', level)
+  
+  const enemy: Enemy = {
+    id: 'dummy' + (counter++),
+    name: `🎯 ${name}`,
+    level,
+    maxHp: baseHp,
+    hp: baseHp,
+    type: 'training_dummy',
+    specialAbility: undefined, // No special abilities for training dummies
+    isBoss: false,
+    state: 'alive',
+    alpha: 1,
+    statusEffects: [],
+    armor: 0 // No armor for easy testing
+  }
+  
+  return enemy
 }

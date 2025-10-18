@@ -82,6 +82,23 @@ const PassiveTreeModal: React.FC<PassiveTreeModalProps> = ({
     const isAllocated = (treeState.allocatedNodes[node.id] || 0) > 0
     const canAllocate = canAllocateNode(node.id, treeData, treeState)
     
+    // Use archetype colors when available
+    const archetypeColors = {
+      'combat': { allocated: '#dc2626', available: '#b91c1c' }, // red
+      'defensive': { allocated: '#2563eb', available: '#1d4ed8' }, // blue
+      'utility': { allocated: '#16a34a', available: '#15803d' }, // green
+      'magic': { allocated: '#7c3aed', available: '#6d28d9' }, // purple
+      'mastery': { allocated: '#f59e0b', available: '#d97706' } // amber
+    }
+    
+    if (node.archetype && archetypeColors[node.archetype as keyof typeof archetypeColors]) {
+      const colors = archetypeColors[node.archetype as keyof typeof archetypeColors]
+      if (isAllocated) return colors.allocated
+      if (canAllocate) return colors.available
+      return '#374151' // dark gray for unavailable
+    }
+    
+    // Fallback to type-based colors
     if (isAllocated) {
       switch (node.type) {
         case 'travel': return '#4ade80' // green
@@ -108,6 +125,55 @@ const PassiveTreeModal: React.FC<PassiveTreeModalProps> = ({
       case 'notable': return 18
       default: return 10
     }
+  }
+
+  const renderArchetypeBackgrounds = () => {
+    if (!treeData.archetypes) return null
+    
+    return treeData.archetypes.map(archetype => (
+      <circle
+        key={archetype.id}
+        cx={archetype.position.x}
+        cy={archetype.position.y}
+        r={archetype.radius}
+        fill={archetype.color}
+        opacity="0.1"
+        stroke={archetype.color}
+        strokeWidth="2"
+        strokeOpacity="0.3"
+        pointerEvents="none"
+      />
+    ))
+  }
+
+  const renderArchetypeLabels = () => {
+    if (!treeData.archetypes) return null
+    
+    return treeData.archetypes.map(archetype => (
+      <g key={`label-${archetype.id}`}>
+        <text
+          x={archetype.position.x}
+          y={archetype.position.y - archetype.radius + 20}
+          textAnchor="middle"
+          fill={archetype.color}
+          fontSize="14"
+          fontWeight="bold"
+          pointerEvents="none"
+        >
+          {archetype.name}
+        </text>
+        <text
+          x={archetype.position.x}
+          y={archetype.position.y - archetype.radius + 35}
+          textAnchor="middle"
+          fill="#9ca3af"
+          fontSize="10"
+          pointerEvents="none"
+        >
+          {archetype.description}
+        </text>
+      </g>
+    ))
   }
 
   const renderConnections = () => {
@@ -186,7 +252,7 @@ const PassiveTreeModal: React.FC<PassiveTreeModalProps> = ({
     const canAllocate = canAllocateNode(node.id, treeData, treeState)
     
     return (
-      <div className="absolute top-4 left-4 bg-gray-900 border border-gray-600 rounded-lg p-4 max-w-xs z-50">
+      <div className="absolute top-4 left-4 bg-gray-900 border border-gray-600 rounded-lg p-4 max-w-sm z-50">
         <div className="text-white">
           <div className="flex items-center gap-2 mb-2">
             <h3 className="font-bold text-lg">{node.name}</h3>
@@ -197,8 +263,32 @@ const PassiveTreeModal: React.FC<PassiveTreeModalProps> = ({
             }`}>
               {node.type}
             </span>
+            {node.archetype && (
+              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                node.archetype === 'combat' ? 'bg-red-600' :
+                node.archetype === 'defensive' ? 'bg-blue-600' :
+                node.archetype === 'utility' ? 'bg-green-600' :
+                node.archetype === 'magic' ? 'bg-purple-600' :
+                'bg-amber-600'
+              }`}>
+                {node.archetype}
+              </span>
+            )}
           </div>
           <p className="text-gray-300 mb-2">{node.description}</p>
+          
+          {/* Skill Modifiers */}
+          {node.skillModifiers && node.skillModifiers.length > 0 && (
+            <div className="mb-2">
+              <h4 className="text-sm font-semibold text-cyan-400 mb-1">Special Effects:</h4>
+              {node.skillModifiers.map((modifier, index) => (
+                <div key={index} className="text-xs text-cyan-300">
+                  • {modifier.skillId}: {modifier.property} {modifier.type === 'additive' ? '+' : '×'}{modifier.value}
+                </div>
+              ))}
+            </div>
+          )}
+          
           <div className="text-sm">
             <div className="text-yellow-400">Cost: {node.cost} points</div>
             {isAllocated && (
@@ -250,6 +340,8 @@ const PassiveTreeModal: React.FC<PassiveTreeModalProps> = ({
             <g
               transform={`translate(${viewState.offsetX + 400}, ${viewState.offsetY + 300}) scale(${viewState.zoom})`}
             >
+              {renderArchetypeBackgrounds()}
+              {renderArchetypeLabels()}
               {renderConnections()}
               {renderNodes()}
             </g>

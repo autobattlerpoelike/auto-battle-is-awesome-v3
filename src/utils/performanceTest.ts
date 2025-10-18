@@ -3,6 +3,7 @@ import { generateEquipment } from '../systems/equipmentGenerator'
 import { generateLoot } from '../systems/loot'
 import { generateAffixes } from '../systems/items'
 import { calculatePlayerStats, defaultPlayer } from '../systems/player'
+import { generatePassiveTree, calculatePassiveTreeStats, allocateNode, canAllocateNode } from '../systems/passiveTree'
 
 interface PerformanceResult {
   operation: string
@@ -103,6 +104,95 @@ export function testStatCalculation(iterations: number = 100): PerformanceResult
   }
 }
 
+// Test passive tree generation performance
+export function testPassiveTreeGeneration(iterations: number = 10): PerformanceResult {
+  const startTime = performance.now()
+  
+  for (let i = 0; i < iterations; i++) {
+    generatePassiveTree()
+  }
+  
+  const endTime = performance.now()
+  const totalTime = endTime - startTime
+  
+  return {
+    operation: 'Passive Tree Generation (1000 nodes)',
+    iterations,
+    totalTime,
+    averageTime: totalTime / iterations,
+    itemsPerSecond: (iterations / totalTime) * 1000
+  }
+}
+
+// Test passive tree stat calculation performance
+export function testPassiveTreeStatCalculation(iterations: number = 1000): PerformanceResult {
+  const treeData = generatePassiveTree()
+  
+  // Create a realistic tree state with some allocated nodes
+  const treeState = {
+    allocatedNodes: {} as Record<string, number>,
+    availablePoints: 100
+  }
+  
+  // Allocate some random nodes to simulate a realistic scenario
+  const nodeIds = Object.keys(treeData.nodes)
+  for (let i = 0; i < 50 && i < nodeIds.length; i++) {
+    const nodeId = nodeIds[i]
+    if (canAllocateNode(nodeId, treeData, treeState)) {
+      const newState = allocateNode(nodeId, treeData, treeState)
+      treeState.allocatedNodes = newState.allocatedNodes
+      treeState.availablePoints = newState.availablePoints
+    }
+  }
+  
+  const startTime = performance.now()
+  
+  for (let i = 0; i < iterations; i++) {
+    calculatePassiveTreeStats(treeData, treeState)
+  }
+  
+  const endTime = performance.now()
+  const totalTime = endTime - startTime
+  
+  return {
+    operation: 'Passive Tree Stat Calculation',
+    iterations,
+    totalTime,
+    averageTime: totalTime / iterations,
+    itemsPerSecond: (iterations / totalTime) * 1000
+  }
+}
+
+// Test passive tree node allocation performance
+export function testPassiveTreeNodeAllocation(iterations: number = 1000): PerformanceResult {
+  const treeData = generatePassiveTree()
+  const nodeIds = Object.keys(treeData.nodes)
+  
+  const startTime = performance.now()
+  
+  for (let i = 0; i < iterations; i++) {
+    const treeState = {
+      allocatedNodes: {} as Record<string, number>,
+      availablePoints: 1000
+    }
+    
+    // Try to allocate a random node
+    const randomNodeId = nodeIds[Math.floor(Math.random() * nodeIds.length)]
+    canAllocateNode(randomNodeId, treeData, treeState)
+  }
+  
+  const endTime = performance.now()
+  const totalTime = endTime - startTime
+  
+  return {
+    operation: 'Passive Tree Node Allocation Check',
+    iterations,
+    totalTime,
+    averageTime: totalTime / iterations,
+    itemsPerSecond: (iterations / totalTime) * 1000
+  }
+}
+
 // Run comprehensive performance test suite
 export function runPerformanceTestSuite(): PerformanceResult[] {
   console.log('🚀 Starting Performance Test Suite...')
@@ -125,6 +215,16 @@ export function runPerformanceTestSuite(): PerformanceResult[] {
   console.log('Testing stat calculation...')
   results.push(testStatCalculation(100))
   
+  // Test passive tree performance
+  console.log('Testing passive tree generation...')
+  results.push(testPassiveTreeGeneration(10))
+  
+  console.log('Testing passive tree stat calculation...')
+  results.push(testPassiveTreeStatCalculation(1000))
+  
+  console.log('Testing passive tree node allocation...')
+  results.push(testPassiveTreeNodeAllocation(1000))
+  
   console.log('✅ Performance Test Suite Complete!')
   
   // Log results
@@ -134,6 +234,16 @@ export function runPerformanceTestSuite(): PerformanceResult[] {
     console.log(`  Total Time: ${result.totalTime.toFixed(2)}ms`)
     console.log(`  Average Time: ${result.averageTime.toFixed(4)}ms`)
     console.log(`  Items/Second: ${result.itemsPerSecond.toFixed(0)}`)
+    
+    // Performance warnings for passive tree
+    if (result.operation.includes('Passive Tree')) {
+      if (result.averageTime > 10) {
+        console.warn(`⚠️ ${result.operation} is slow (${result.averageTime.toFixed(2)}ms avg)`)
+      }
+      if (result.itemsPerSecond < 100) {
+        console.warn(`⚠️ ${result.operation} has low throughput (${result.itemsPerSecond.toFixed(0)} items/sec)`)
+      }
+    }
   })
   
   return results
@@ -160,6 +270,9 @@ if (typeof window !== 'undefined') {
     testEquipment: testEquipmentGeneration,
     testLoot: testLootGeneration,
     testAffixes: testAffixGeneration,
-    testStats: testStatCalculation
+    testStats: testStatCalculation,
+    testPassiveTreeGeneration: testPassiveTreeGeneration,
+    testPassiveTreeStats: testPassiveTreeStatCalculation,
+    testPassiveTreeAllocation: testPassiveTreeNodeAllocation
   }
 }

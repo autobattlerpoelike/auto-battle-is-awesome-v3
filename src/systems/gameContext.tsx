@@ -36,7 +36,7 @@ function calculatePlayerStatsMemoized(player: Player): Player {
   
   return calculatedPlayer
 }
-import { Enemy, EnemyType, spawnEnemyForLevel } from './enemy'
+import { Enemy, EnemyType, spawnEnemyForLevel, spawnTrainingDummy } from './enemy'
 import { simulateCombatTick } from './combat'
 import { generateLoot } from './loot'
 import { loadSave, saveState } from './save'
@@ -85,6 +85,7 @@ interface GameState {
 type GameAction = 
   | { type: 'LOAD'; payload?: any }
   | { type: 'SPAWN'; payload?: { level?: number; kind?: EnemyType } }
+  | { type: 'SPAWN_TRAINING_DUMMY'; payload?: { level?: number } }
   | { type: 'TICK'; payload?: { enemyId: string } }
   | { type: 'REMOVE'; payload: string }
   | { type: 'EQUIP'; payload: string }
@@ -119,6 +120,7 @@ type GameAction =
 
 interface GameActions {
   spawnEnemy: (level?: number, kind?: EnemyType) => void
+  spawnTrainingDummy: (level?: number) => void
   simulateTick: (enemyId: string) => void
   removeEnemy: (id: string) => void
   equipItem: (id: string) => void
@@ -291,6 +293,14 @@ function reducer(state: GameState, action: GameAction): GameState {
       const enemy = spawnEnemyForLevel(level, kind)
       const enemies = [...state.enemies, enemy].slice(0,25)
       const newLog = [`Spawned ${enemy.name}`, ...state.log].slice(0,200)
+      saveState({ player: state.player, inventory: state.inventory, enemies, skills: state.skills })
+      return { ...state, enemies, log: newLog }
+    }
+    case 'SPAWN_TRAINING_DUMMY': {
+      const level = action.payload?.level ?? state.player.level
+      const enemy = spawnTrainingDummy(level)
+      const enemies = [...state.enemies, enemy].slice(0,25)
+      const newLog = [`Spawned ${enemy.name} for training`, ...state.log].slice(0,200)
       saveState({ player: state.player, inventory: state.inventory, enemies, skills: state.skills })
       return { ...state, enemies, log: newLog }
     }
@@ -1586,11 +1596,18 @@ export function GameProvider({ children }: GameProviderProps) {
     return () => clearInterval(tid)
   }, [])
 
-  // auto-combat loop: interval scales with Quick Reflexes skill
+  // auto-combat loop: interval scales with Quick Reflexes skill and Attack Speed
   useEffect(() => {
     const quick = state.skills['quick'] ?? 0
+    const playerAttackSpeed = state.player.attackSpeed ?? 0
     const baseInterval = 1000
-    const interval = Math.max(300, Math.round(baseInterval / (1 + quick * 0.05)))
+    
+    // Combine Quick Reflexes skill and Attack Speed stat for combat timing
+    const quickBonus = quick * 0.05
+    const attackSpeedBonus = playerAttackSpeed
+    const totalSpeedBonus = quickBonus + attackSpeedBonus
+    
+    const interval = Math.max(200, Math.round(baseInterval / (1 + totalSpeedBonus)))
     const tid = setInterval(() => {
       // Trigger auto-skills once per combat cycle
       dispatch({ type: 'AUTO_SKILLS' })
@@ -1600,7 +1617,7 @@ export function GameProvider({ children }: GameProviderProps) {
       aliveEnemyIds.forEach(id => dispatch({ type: 'TICK', payload: { enemyId: id } }))
     }, interval)
     return () => clearInterval(tid)
-  }, [state.skills, state.enemies])
+  }, [state.skills, state.enemies, state.player.attackSpeed])
 
   // Continuous channeling loop for whirlwind - runs independently of combat
   useEffect(() => {
@@ -1626,6 +1643,7 @@ export function GameProvider({ children }: GameProviderProps) {
 
   const actions: GameActions = useMemo(() => ({
     spawnEnemy: (level?: number, kind?: EnemyType) => dispatch({ type: 'SPAWN', payload: { level, kind } }),
+    spawnTrainingDummy: (level?: number) => dispatch({ type: 'SPAWN_TRAINING_DUMMY', payload: { level } }),
     simulateTick: (enemyId: string) => dispatch({ type: 'TICK', payload: { enemyId } }),
     removeEnemy: (id: string) => dispatch({ type: 'REMOVE', payload: id }),
     equipItem: (id: string) => dispatch({ type: 'EQUIP', payload: id }),

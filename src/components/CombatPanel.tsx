@@ -39,21 +39,31 @@ export default function CombatPanel() {
     <div className="panel p-4 h-full flex flex-col">
       <h2 className="text-lg font-bold mb-3">Combat</h2>
       
-      {/* Enemy */}
-      {currentEnemy && (
-        <div className="mb-4 p-3 bg-red-900 rounded">
-          <h3 className="font-bold text-red-200">
-            {currentEnemy.isBoss && '👑 '}{currentEnemy.name} (Level {currentEnemy.level})
-            {currentEnemy.isBoss && ' - BOSS'}
-          </h3>
-          <div className="text-sm">
-            <div>HP: {currentEnemy.hp}/{currentEnemy.maxHp}</div>
-            <div>Type: {currentEnemy.type}</div>
-            {currentEnemy.armor && <div>Armor: {currentEnemy.armor}</div>}
-            {currentEnemy.specialAbility && (
-              <div className="text-yellow-300">{formatSpecialAbility(currentEnemy.specialAbility)}</div>
-            )}
-          </div>
+      {/* Enemies */}
+      {enemies.length > 0 ? (
+        <div className="mb-4 space-y-2 max-h-48 overflow-y-auto">
+          <h3 className="font-bold text-red-200">Enemies ({enemies.length})</h3>
+          {enemies.map((enemy, index) => (
+            <div key={enemy.id} className="p-3 bg-red-900 rounded">
+              <h4 className="font-bold text-red-200">
+                {enemy.isBoss && '👑 '}{enemy.name} (Level {enemy.level})
+                {enemy.isBoss && ' - BOSS'}
+                {index === 0 && ' - TARGET'}
+              </h4>
+              <div className="text-sm">
+                <div>HP: {enemy.hp}/{enemy.maxHp}</div>
+                <div>Type: {enemy.type}</div>
+                {enemy.armor && <div>Armor: {enemy.armor}</div>}
+                {enemy.specialAbility && (
+                  <div className="text-yellow-300">{formatSpecialAbility(enemy.specialAbility)}</div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mb-4 p-3 bg-gray-700 rounded">
+          <h3 className="font-bold text-gray-300">No enemies present</h3>
         </div>
       )}
       
@@ -82,6 +92,12 @@ export default function CombatPanel() {
           className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-sm"
         >
           Spawn Enemy
+        </button>
+        <button 
+          onClick={() => dispatch({ type: 'SPAWN_TRAINING_DUMMY' })}
+          className="px-3 py-1 bg-pink-600 hover:bg-pink-700 rounded text-sm"
+        >
+          🎯 Training Dummy
         </button>
         {currentEnemy && (
           <button 

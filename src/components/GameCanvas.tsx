@@ -178,19 +178,36 @@ const GameCanvas = React.memo(function GameCanvas() {
         if (!newPositions[e.id]) {
           hasNewEnemies = true
           
-          // Select a spawn zone for this new enemy
-          const zone = spawnZones[i % spawnZones.length]
-          
-          // Generate random position within the selected zone
-          const angle = Math.random() * Math.PI * 2
-          const distance = Math.random() * zone.radius
-          const worldX = zone.centerX + Math.cos(angle) * distance
-          const worldY = zone.centerY + Math.sin(angle) * distance
-          
-          // Ensure enemies stay within world boundaries
-          newPositions[e.id] = { 
-            x: Math.max(50, Math.min(WORLD_WIDTH - 50, worldX)), 
-            y: Math.max(50, Math.min(WORLD_HEIGHT - 50, worldY)) 
+          // Special positioning for training dummies - place at North indicator position
+          if (e.type === 'training_dummy') {
+            // Calculate North indicator position in world coordinates
+            // North indicator is positioned at basic attack range north of player
+            const basicAttackRange = getScaledRange(state.player.basicAttackRange || 120, state.player)
+            
+            // North is negative Y direction in world coordinates
+            const northWorldX = playerPos.x
+            const northWorldY = playerPos.y - basicAttackRange
+            
+            // Ensure training dummy stays within world boundaries
+            newPositions[e.id] = { 
+              x: Math.max(50, Math.min(WORLD_WIDTH - 50, northWorldX)), 
+              y: Math.max(50, Math.min(WORLD_HEIGHT - 50, northWorldY)) 
+            }
+          } else {
+            // Regular enemy positioning using spawn zones
+            const zone = spawnZones[i % spawnZones.length]
+            
+            // Generate random position within the selected zone
+            const angle = Math.random() * Math.PI * 2
+            const distance = Math.random() * zone.radius
+            const worldX = zone.centerX + Math.cos(angle) * distance
+            const worldY = zone.centerY + Math.sin(angle) * distance
+            
+            // Ensure enemies stay within world boundaries
+            newPositions[e.id] = { 
+              x: Math.max(50, Math.min(WORLD_WIDTH - 50, worldX)), 
+              y: Math.max(50, Math.min(WORLD_HEIGHT - 50, worldY)) 
+            }
           }
         }
       })
@@ -210,7 +227,7 @@ const GameCanvas = React.memo(function GameCanvas() {
       
       return prevPositions
     })
-  }, [state.enemies])
+  }, [state.enemies, playerPos, state.player])
 
   // Sync enemy positions with game state - separate effect to avoid setState during render
   useEffect(() => {
@@ -295,12 +312,17 @@ const GameCanvas = React.memo(function GameCanvas() {
           const slashX = playerPos.x + Math.cos(directionAngle) * slashDistance
           const slashY = playerPos.y + Math.sin(directionAngle) * slashDistance
           
+          // Scale animation duration with attack speed - faster attack speed = shorter animation
+          const baseAnimationDuration = 400
+          const playerAttackSpeed = state.player.attackSpeed ?? 0
+          const animationDuration = Math.max(150, Math.round(baseAnimationDuration / (1 + playerAttackSpeed)))
+          
           setEffects(s => [...s, { 
             kind:'slash', 
             x: slashX, 
             y: slashY, 
             t: Date.now(), 
-            ttl: 400, // Shorter duration for cleaner effect
+            ttl: animationDuration, // Duration scales with attack speed
             angle: directionAngle, 
             color,
             size: 60 // Appropriate size for arc effect
@@ -308,14 +330,18 @@ const GameCanvas = React.memo(function GameCanvas() {
         } else if (wtype === 'ranged') {
           if (pos) {
             const dirx = pos.x - playerPos.x, diry = pos.y - playerPos.y, d = Math.hypot(dirx,diry)||1
-            const speed = 3 * (state.player.projectileSpeed || 1) * (1 + (state.skills['arcane']||0)*0.1)
-            setProjectiles(p => [...p, { x: playerPos.x, y: playerPos.y, vx: dirx/d*speed, vy: diry/d*speed, life: 800, color, radius:3, size:2 }])
+            const playerAttackSpeed = state.player.attackSpeed ?? 0
+            const speed = 3 * (state.player.projectileSpeed || 1) * (1 + (state.skills['arcane']||0)*0.1) * (1 + playerAttackSpeed * 0.5)
+            const life = Math.max(400, Math.round(800 / (1 + playerAttackSpeed * 0.3))) // Faster projectiles have shorter life
+            setProjectiles(p => [...p, { x: playerPos.x, y: playerPos.y, vx: dirx/d*speed, vy: diry/d*speed, life, color, radius:3, size:2 }])
           }
         } else if (wtype === 'magic') {
           if (pos) {
             const dirx = pos.x - playerPos.x, diry = pos.y - playerPos.y, d = Math.hypot(dirx,diry)||1
-            const speed = 2 * (state.player.projectileSpeed || 1) * (1 + (state.skills['arcane']||0)*0.1)
-            setProjectiles(p => [...p, { x: playerPos.x, y: playerPos.y, vx: dirx/d*speed, vy: diry/d*speed, life: 1200, color, radius:6, size:4, glow:true }])
+            const playerAttackSpeed = state.player.attackSpeed ?? 0
+            const speed = 2 * (state.player.projectileSpeed || 1) * (1 + (state.skills['arcane']||0)*0.1) * (1 + playerAttackSpeed * 0.5)
+            const life = Math.max(600, Math.round(1200 / (1 + playerAttackSpeed * 0.3))) // Faster projectiles have shorter life
+            setProjectiles(p => [...p, { x: playerPos.x, y: playerPos.y, vx: dirx/d*speed, vy: diry/d*speed, life, color, radius:6, size:4, glow:true }])
           }
         }
 
@@ -1069,6 +1095,52 @@ const GameCanvas = React.memo(function GameCanvas() {
         }
       }
 
+      // Player pushback system - push player outside of overlapping enemies
+      const playerRadius = 18
+      const pushbackDistance = 40
+      
+      state.enemies.forEach(e => {
+        const enemyPos = enemyPositions[e.id]
+        if (enemyPos && e.hp > 0) {
+          // Calculate enemy radius
+          let enemyRadius = 12
+          if (e.type === 'melee') {
+            enemyRadius = 12 + e.level * 0.8
+          } else if (e.type === 'ranged') {
+            enemyRadius = 10 + e.level * 0.6
+          } else {
+            enemyRadius = 14 + e.level * 1.0
+          }
+          
+          // Check if player is overlapping with enemy
+          const distance = dist(newPlayerPos, enemyPos)
+          const minDistance = playerRadius + enemyRadius
+          
+          if (distance < minDistance) {
+            // Calculate direction from enemy to player
+            const dx = newPlayerPos.x - enemyPos.x
+            const dy = newPlayerPos.y - enemyPos.y
+            const currentDistance = Math.hypot(dx, dy) || 1
+            
+            // Normalize direction and push player to desired distance
+            const normalizedX = dx / currentDistance
+            const normalizedY = dy / currentDistance
+            const targetDistance = enemyRadius + pushbackDistance
+            
+            // Calculate new player position
+            const pushedPlayerPos = {
+              x: enemyPos.x + normalizedX * targetDistance,
+              y: enemyPos.y + normalizedY * targetDistance
+            }
+            
+            // Ensure the pushed position is within world bounds
+            if (isWithinBounds(pushedPlayerPos, playerRadius)) {
+              newPlayerPos = pushedPlayerPos
+            }
+          }
+        }
+      })
+
       // Update camera to follow player
       const playerIso = worldToIso(newPlayerPos.x, newPlayerPos.y)
       newCamera = {
@@ -1126,8 +1198,15 @@ const GameCanvas = React.memo(function GameCanvas() {
           }
         })
         
-        // Allow movement unless colliding with other enemies
-        // Enemies should be able to get close to the player for combat
+        // Check collision with player - enemies should not move through the player
+        if (canMove) {
+          const playerRadius = 18 // Same radius used for player collision detection
+          if (checkCollision(calculatedPos, newPlayerPos, currentEnemyRadius + 2, playerRadius)) {
+            canMove = false
+          }
+        }
+        
+        // Allow movement unless colliding with other enemies or player
         if (canMove) {
           nextEnemyPositions[e.id] = calculatedPos
         }

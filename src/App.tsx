@@ -164,6 +164,27 @@ export default function App() {
       
 
 
+      {/* Training Dummy Button */}
+      <button
+        onClick={() => actions.spawnTrainingDummy()}
+        className="fixed bottom-64 right-4 px-3 py-2 rounded-lg text-sm font-medium shadow-lg z-50 transition-all duration-200"
+        style={{
+          background: 'linear-gradient(135deg, #ec4899, #f472b6)',
+          color: 'white',
+          border: 'none'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-2px)'
+          e.currentTarget.style.boxShadow = '0 8px 25px rgba(236, 72, 153, 0.4)'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)'
+          e.currentTarget.style.boxShadow = '0 4px 14px rgba(236, 72, 153, 0.3)'
+        }}
+      >
+        🎯 Training Dummy
+      </button>
+
       {/* Equipment Modal Button */}
       <button
         onClick={() => openModal('equipment')}
