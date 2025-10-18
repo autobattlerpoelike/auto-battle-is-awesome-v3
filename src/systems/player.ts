@@ -1,6 +1,9 @@
 import { Equipment, EquipmentSlot, Attribute, EquipmentStats } from './equipment'
 import { SkillGem, SupportGem, SkillBar, MAIN_SKILL_GEMS, SUPPORT_GEMS, createDefaultSkillGem, createDefaultSupportGem, createDefaultSkillBar } from './skillGems'
 import { MapDevice, createDefaultMapDevice } from './mapping'
+import { PassiveTreeState, PassiveTreeData, generatePassiveTree, calculatePassiveTreeStats, getSkillModifiersFromTree } from './passiveTree'
+import { Stone } from './stones'
+import { calculateStoneStats } from '../utils/equipmentTooltip'
 
 export type Player = {
   level: number
@@ -19,6 +22,12 @@ export type Player = {
   // Character Attributes
   attributes: Record<Attribute, number>
   
+  // Character Appearance
+  characterModel?: string // Character sprite model ID (e.g., 'human_male', 'knight_1', etc.)
+  gender?: 'male' | 'female'
+  race?: 'human' | 'elf' | 'dwarf' | 'orc'
+  cosmetics?: Record<string, any>
+  
   // Equipment slots
   equipment: Partial<Record<EquipmentSlot, Equipment>>
   
@@ -36,6 +45,13 @@ export type Player = {
   
   // Endgame Mapping System
   mapDevice: MapDevice
+  
+  // Passive Skill Tree System
+  passiveTreeState: PassiveTreeState
+  passiveTreeData: PassiveTreeData
+  
+  // Stone Inventory System
+  stones: Stone[]
   
   // Base stats
   attackSpeed?: number
@@ -66,14 +82,17 @@ export function defaultPlayer(): Player {
   const skillGems = MAIN_SKILL_GEMS.map(template => createDefaultSkillGem(template))
   const supportGems = SUPPORT_GEMS.map(template => createDefaultSupportGem(template))
   
-  // Find the Whirlwind skill to place in skill bar slot 0
-  const whirlwindSkill = skillGems.find(skill => skill.id === 'whirlwind')
+  // Create skill bar with default equipped skills (whirlwind, fireball, lightning_bolt, ice_shard)
+  const skillBar = createDefaultSkillBar()
   
-  // Create skill bar with Whirlwind in first slot
-  const skillBarSlots = new Array(6).fill(null)
-  if (whirlwindSkill) {
-    skillBarSlots[0] = whirlwindSkill
-  }
+  // Mark auto-equipped skills as equipped in the skillGems array
+  const autoEquippedSkillIds = ['fireball', 'lightning_bolt', 'ice_shard', 'whirlwind']
+  autoEquippedSkillIds.forEach(skillId => {
+    const skillGem = skillGems.find(gem => gem.id === skillId)
+    if (skillGem) {
+      skillGem.isEquipped = true
+    }
+  })
   
   return {
     level: 10,
@@ -98,6 +117,12 @@ export function defaultPlayer(): Player {
       luck: 5
     },
     
+    // Character Appearance
+    characterModel: 'human_male', // Default character model
+    gender: 'male',
+    race: 'human',
+    cosmetics: {},
+    
     // Empty equipment slots
     equipment: {},
     
@@ -110,13 +135,20 @@ export function defaultPlayer(): Player {
     // Skill Gem System - Use the created skill gems and skill bar
     skillGems,
     supportGems,
-    skillBar: {
-      slots: skillBarSlots,
-      maxSlots: 6
-    },
+    skillBar,
     
     // Endgame Mapping System
     mapDevice: createDefaultMapDevice(),
+    
+    // Passive Skill Tree System
+    passiveTreeState: {
+      allocatedNodes: { 'start': 1 }, // Start with the origin node allocated
+      availablePoints: 10 // Starting passive points
+    },
+    passiveTreeData: generatePassiveTree(),
+    
+    // Stone Inventory System
+    stones: [],
     
     // Base stats
     attackSpeed: 1,
@@ -234,6 +266,16 @@ export function calculatePlayerStats(basePlayer: Player): Player {
             statsAccumulator[affix.stat] = (statsAccumulator[affix.stat] ?? 0) + affix.value
           }
         }
+        
+        // Add socketed stone stats
+        if (equipment.sockets && player.stones) {
+          const stoneStats = calculateStoneStats(equipment, player.stones)
+          for (const [stat, value] of Object.entries(stoneStats)) {
+            if (typeof value === 'number' && stat !== 'resistance') {
+              statsAccumulator[stat] = (statsAccumulator[stat] ?? 0) + value
+            }
+          }
+        }
       }
     })
     
@@ -241,47 +283,59 @@ export function calculatePlayerStats(basePlayer: Player): Player {
     totalEquipmentStats = statsAccumulator as EquipmentStats
   }
   
+  // Calculate passive tree stats
+  let passiveTreeStats: EquipmentStats = {}
+  if (player.passiveTreeData && player.passiveTreeState) {
+    passiveTreeStats = calculatePassiveTreeStats(player.passiveTreeData, player.passiveTreeState)
+  }
+
   // Apply equipment stats to player
-  player.dps = player.baseDps + (totalEquipmentStats.damage ?? 0)
-  player.armor += (totalEquipmentStats.armor ?? 0)
-  player.maxHp += (totalEquipmentStats.health ?? 0)
-  player.maxMana += (totalEquipmentStats.mana ?? 0)
-  player.critChance += (totalEquipmentStats.critChance ?? 0)
-  player.dodgeChance += (totalEquipmentStats.dodgeChance ?? 0)
-  player.blockChance += (totalEquipmentStats.blockChance ?? 0)
-  player.lifeSteal += (totalEquipmentStats.lifeSteal ?? 0)
-  player.attackSpeed += (totalEquipmentStats.attackSpeed ?? 0)
-  player.healthRegen += (totalEquipmentStats.healthRegen ?? 0)
-  player.manaRegen += (totalEquipmentStats.manaRegen ?? 0)
+  const equipmentDamage = totalEquipmentStats.damage ?? 0
+  const passiveDamage = passiveTreeStats.damage ?? 0
+  player.dps = player.baseDps + equipmentDamage + passiveDamage
   
-  // Apply attribute bonuses from equipment
-  if (totalEquipmentStats.strength) {
-    const equipStrBonus = totalEquipmentStats.strength
-    player.baseDps += equipStrBonus
-    player.maxHp += equipStrBonus * 2
+  player.armor += (totalEquipmentStats.armor ?? 0) + (passiveTreeStats.armor ?? 0)
+  player.maxHp += (totalEquipmentStats.health ?? 0) + (passiveTreeStats.health ?? 0)
+  player.maxMana += (totalEquipmentStats.mana ?? 0) + (passiveTreeStats.mana ?? 0)
+  player.critChance += (totalEquipmentStats.critChance ?? 0) + (passiveTreeStats.critChance ?? 0)
+  player.dodgeChance += (totalEquipmentStats.dodgeChance ?? 0) + (passiveTreeStats.dodgeChance ?? 0)
+  player.blockChance += (totalEquipmentStats.blockChance ?? 0) + (passiveTreeStats.blockChance ?? 0)
+  player.lifeSteal += (totalEquipmentStats.lifeSteal ?? 0) + (passiveTreeStats.lifeSteal ?? 0)
+  player.attackSpeed += (totalEquipmentStats.attackSpeed ?? 0) + (passiveTreeStats.attackSpeed ?? 0)
+  player.healthRegen += (totalEquipmentStats.healthRegen ?? 0) + (passiveTreeStats.healthRegen ?? 0)
+  player.manaRegen += (totalEquipmentStats.manaRegen ?? 0) + (passiveTreeStats.manaRegen ?? 0)
+  
+  // Apply attribute bonuses from base attributes, equipment, and passive tree
+  const totalStrBonus = (player.attributes.strength ?? 0) + (totalEquipmentStats.strength ?? 0) + (passiveTreeStats.strength ?? 0)
+  const totalDexBonus = (player.attributes.dexterity ?? 0) + (totalEquipmentStats.dexterity ?? 0) + (passiveTreeStats.dexterity ?? 0)
+  const totalIntBonus = (player.attributes.intelligence ?? 0) + (totalEquipmentStats.intelligence ?? 0) + (passiveTreeStats.intelligence ?? 0)
+  const totalVitBonus = (player.attributes.vitality ?? 0) + (totalEquipmentStats.vitality ?? 0) + (passiveTreeStats.vitality ?? 0)
+  const totalLuckBonus = (player.attributes.luck ?? 0) + (totalEquipmentStats.luck ?? 0) + (passiveTreeStats.luck ?? 0)
+  
+  if (totalStrBonus) {
+    player.baseDps += totalStrBonus
+    player.maxHp += totalStrBonus * 2
   }
-  if (totalEquipmentStats.dexterity) {
-    const equipDexBonus = totalEquipmentStats.dexterity
-    player.critChance += equipDexBonus * 0.005
-    player.dodgeChance += equipDexBonus * 0.003
+  if (totalDexBonus) {
+    player.critChance += totalDexBonus * 0.005
+    player.dodgeChance += totalDexBonus * 0.003
   }
-  if (totalEquipmentStats.intelligence) {
-    const equipIntBonus = totalEquipmentStats.intelligence
-    player.maxMana += equipIntBonus
-    player.manaRegen += equipIntBonus * 0.2
+  if (totalIntBonus) {
+    player.maxMana += totalIntBonus
+    player.manaRegen += totalIntBonus * 0.2
   }
-  if (totalEquipmentStats.vitality) {
-    const equipVitBonus = totalEquipmentStats.vitality
-    player.maxHp += equipVitBonus * 3
-    player.healthRegen += equipVitBonus * 0.1
+  if (totalVitBonus) {
+    player.maxHp += totalVitBonus * 3
+    player.healthRegen += totalVitBonus * 0.1
   }
-  if (totalEquipmentStats.luck) {
-    const equipLuckBonus = totalEquipmentStats.luck
-    player.critChance += equipLuckBonus * 0.005
+  if (totalLuckBonus) {
+    player.critChance += totalLuckBonus * 0.005
   }
   
-  // Store calculated stats for reference
-  player.calculatedStats = totalEquipmentStats
+  // Store calculated stats for reference (equipment-derived stats only)
+  player.calculatedStats = {
+    ...totalEquipmentStats
+  }
   
   // Legacy equipment support
   if (player.equipped) {
@@ -327,4 +381,36 @@ export function calculatePlayerStats(basePlayer: Player): Player {
   player.lifeSteal = Math.max(0, Math.min(1, player.lifeSteal ?? 0))
   
   return player
+}
+
+// Test function to verify stone stats integration
+export function testStoneStatsIntegration(player: Player): void {
+  console.log('=== Stone Stats Integration Test ===')
+  console.log('Player stones:', player.stones?.length || 0)
+  
+  if (player.equipment) {
+    Object.entries(player.equipment).forEach(([slot, equipment]) => {
+      if (equipment?.sockets?.stones) {
+        const socketedStones = equipment.sockets.stones.filter(id => id !== null)
+        console.log(`${slot}: ${equipment.name} has ${socketedStones.length} socketed stones`)
+        
+        if (socketedStones.length > 0 && player.stones) {
+          const stoneStats = calculateStoneStats(equipment, player.stones)
+          console.log(`  Stone stats:`, stoneStats)
+        }
+      }
+    })
+  }
+  
+  console.log('Final player stats:')
+  console.log(`  DPS: ${player.dps}`)
+  console.log(`  Armor: ${player.armor}`)
+  console.log(`  Max HP: ${player.maxHp}`)
+  console.log(`  Crit Chance: ${player.critChance}`)
+  console.log('=== End Test ===')
+}
+
+// Make test function available globally for console testing
+if (typeof window !== 'undefined') {
+  (window as any).testStoneStats = testStoneStatsIntegration
 }

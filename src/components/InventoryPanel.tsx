@@ -445,14 +445,14 @@ const InventoryPanel = memo(function InventoryPanel() {
   const { state, dispatch, actions } = useGame()
   const [currentPage, setCurrentPage] = useState(0)
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
-  const [activeTab, setActiveTab] = useState<'all' | 'weapons' | 'armor' | 'accessories'>('all')
+  const [activeTab, setActiveTab] = useState<'all' | 'weapons' | 'helm' | 'chest' | 'legs' | 'boots' | 'gloves' | 'accessories'>('all')
   const [tooltip, setTooltip] = useState<{
     item: any
     position: { x: number; y: number }
     equippedItem?: any
     isPersistent?: boolean
   } | null>(null)
-  const itemsPerPage = 20
+  const itemsPerPage = 10
   const maxPages = 10
   
   // Memoize sorted and filtered inventory to avoid unnecessary re-renders
@@ -464,8 +464,16 @@ const InventoryPanel = memo(function InventoryPanel() {
       filteredInventory = filteredInventory.filter(item => {
         if (activeTab === 'weapons') {
           return item.category === 'weapon'
-        } else if (activeTab === 'armor') {
-          return item.category === 'armor'
+        } else if (activeTab === 'helm') {
+          return item.category === 'armor' && item.slot === 'helm'
+        } else if (activeTab === 'chest') {
+          return item.category === 'armor' && item.slot === 'chest'
+        } else if (activeTab === 'legs') {
+          return item.category === 'armor' && item.slot === 'legs'
+        } else if (activeTab === 'boots') {
+          return item.category === 'armor' && item.slot === 'boots'
+        } else if (activeTab === 'gloves') {
+          return item.category === 'armor' && item.slot === 'gloves'
         } else if (activeTab === 'accessories') {
           return item.category === 'accessory'
         }
@@ -491,13 +499,23 @@ const InventoryPanel = memo(function InventoryPanel() {
     const counts = {
       all: state.inventory.length,
       weapons: 0,
-      armor: 0,
+      helm: 0,
+      chest: 0,
+      legs: 0,
+      boots: 0,
+      gloves: 0,
       accessories: 0
     }
     
     state.inventory.forEach(item => {
       if (item.category === 'weapon') counts.weapons++
-      else if (item.category === 'armor') counts.armor++
+      else if (item.category === 'armor') {
+        if (item.slot === 'helm') counts.helm++
+        else if (item.slot === 'chest') counts.chest++
+        else if (item.slot === 'legs') counts.legs++
+        else if (item.slot === 'boots') counts.boots++
+        else if (item.slot === 'gloves') counts.gloves++
+      }
       else if (item.category === 'accessory') counts.accessories++
     })
     
@@ -538,7 +556,7 @@ const InventoryPanel = memo(function InventoryPanel() {
     setCurrentPage(0) // Reset to first page when changing view mode
   }, [])
 
-  const handleTabChange = useCallback((tab: 'all' | 'weapons' | 'armor' | 'accessories') => {
+  const handleTabChange = useCallback((tab: 'all' | 'weapons' | 'helm' | 'chest' | 'legs' | 'boots' | 'gloves' | 'accessories') => {
     setActiveTab(tab)
     setCurrentPage(0) // Reset to first page when changing tabs
   }, [])
@@ -554,16 +572,22 @@ const InventoryPanel = memo(function InventoryPanel() {
     }
   }, [dispatch, state.inventory])
   
-  const handleSell = useCallback((itemId: string) => {
-    dispatch({ type: 'DISCARD', payload: itemId })
-  }, [dispatch])
-
   // Helper function to check if an item is equipped
   const isItemEquipped = useCallback((item: any) => {
     if (!item.slot) return false
     const equippedItem = state.player.equipment?.[item.slot as keyof typeof state.player.equipment]
     return equippedItem && equippedItem.id === item.id
   }, [state.player.equipment])
+  
+  const handleSell = useCallback((itemId: string) => {
+    const item = state.inventory.find(i => i.id === itemId)
+    if (item && isItemEquipped(item)) {
+      // Don't sell equipped items - show a message instead
+      console.log('Cannot sell equipped item:', item.name)
+      return
+    }
+    dispatch({ type: 'DISCARD', payload: itemId })
+  }, [dispatch, state.inventory, isItemEquipped])
 
   // Tooltip handlers
   const handleItemHover = useCallback((event: React.MouseEvent, item: any) => {
@@ -721,14 +745,54 @@ const InventoryPanel = memo(function InventoryPanel() {
             ⚔️ Weapons <span className="text-xs opacity-75">({tabCounts.weapons})</span>
           </button>
           <button
-            onClick={() => handleTabChange('armor')}
+            onClick={() => handleTabChange('helm')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-              activeTab === 'armor' 
+              activeTab === 'helm' 
                 ? 'bg-blue-600 text-white shadow-lg' 
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
             }`}
           >
-            🛡️ Armor <span className="text-xs opacity-75">({tabCounts.armor})</span>
+            ⛑️ Helms <span className="text-xs opacity-75">({tabCounts.helm})</span>
+          </button>
+          <button
+            onClick={() => handleTabChange('chest')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+              activeTab === 'chest' 
+                ? 'bg-blue-600 text-white shadow-lg' 
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+            }`}
+          >
+            🛡️ Chest <span className="text-xs opacity-75">({tabCounts.chest})</span>
+          </button>
+          <button
+            onClick={() => handleTabChange('legs')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+              activeTab === 'legs' 
+                ? 'bg-blue-600 text-white shadow-lg' 
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+            }`}
+          >
+            👖 Legs <span className="text-xs opacity-75">({tabCounts.legs})</span>
+          </button>
+          <button
+            onClick={() => handleTabChange('boots')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+              activeTab === 'boots' 
+                ? 'bg-blue-600 text-white shadow-lg' 
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+            }`}
+          >
+            👢 Boots <span className="text-xs opacity-75">({tabCounts.boots})</span>
+          </button>
+          <button
+            onClick={() => handleTabChange('gloves')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+              activeTab === 'gloves' 
+                ? 'bg-blue-600 text-white shadow-lg' 
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+            }`}
+          >
+            🧤 Gloves <span className="text-xs opacity-75">({tabCounts.gloves})</span>
           </button>
           <button
             onClick={() => handleTabChange('accessories')}

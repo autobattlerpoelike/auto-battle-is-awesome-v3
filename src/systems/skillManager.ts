@@ -254,7 +254,10 @@ export function equipSkillToBar(player: Player, skillId: string, slotIndex: numb
 }
 
 export function unequipSkillFromBar(player: Player, slotIndex: number): SkillEquipResult {
+  console.log(`🔧 unequipSkillFromBar called with slotIndex: ${slotIndex}`)
+  
   if (slotIndex < 0 || slotIndex >= player.skillBar.maxSlots) {
+    console.log(`❌ Invalid slot index: ${slotIndex}`)
     return { 
       success: false, 
       message: `Invalid slot index. Must be between 0 and ${player.skillBar.maxSlots - 1}` 
@@ -262,22 +265,28 @@ export function unequipSkillFromBar(player: Player, slotIndex: number): SkillEqu
   }
   
   const skill = player.skillBar.slots[slotIndex]
+  console.log(`🔧 Skill in slot ${slotIndex}:`, skill)
   
   if (!skill) {
+    console.log(`❌ No skill equipped in slot ${slotIndex}`)
     return { success: false, message: 'No skill equipped in this slot' }
   }
   
   // Create updated player
   const updatedPlayer = { ...player }
+  console.log(`🔧 Creating updated player for unequipping ${skill.name}`)
   
   // Remove skill from slot
   updatedPlayer.skillBar.slots[slotIndex] = null
+  console.log(`🔧 Removed skill from slot ${slotIndex}`)
   
   // Update skill equipped status
   updatedPlayer.skillGems = updatedPlayer.skillGems.map(s => 
     s.id === skill.id ? { ...s, isEquipped: false } : s
   )
+  console.log(`🔧 Updated skill equipped status for ${skill.name}`)
   
+  console.log(`✅ Successfully unequipped ${skill.name} from slot ${slotIndex + 1}`)
   return {
     success: true,
     message: `${skill.name} unequipped from slot ${slotIndex + 1}`,

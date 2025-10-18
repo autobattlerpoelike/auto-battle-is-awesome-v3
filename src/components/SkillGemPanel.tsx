@@ -20,6 +20,7 @@ import {
   SkillTag 
 } from '../systems/skillGems'
 import { getAvailableSkills, getUnlockedSkills, getAvailableSupportGems, getUnlockedSupportGems } from '../systems/skillManager'
+import SkillGemTooltip from './SkillGemTooltip'
 
 interface SkillGemPanelProps {
   isOpen: boolean
@@ -38,6 +39,10 @@ export const SkillGemPanel = React.memo(function SkillGemPanel({ isOpen, onClose
   const [searchTerm, setSearchTerm] = useState('')
   const [filterTag, setFilterTag] = useState<SkillTag | 'All'>('All')
   const [showAttachMode, setShowAttachMode] = useState(false)
+  const [tooltip, setTooltip] = useState<{
+    skill: SkillGem
+    position: { x: number; y: number }
+  } | null>(null)
 
   // Memoized data - include skillBar in dependencies to update when skills are equipped/unequipped
   const skillData = useMemo(() => ({
@@ -534,7 +539,8 @@ export const SkillGemPanel = React.memo(function SkillGemPanel({ isOpen, onClose
   }
 
   return (
-    <div className="fixed bottom-20 right-4 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-50 w-[800px] h-[600px] flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+      <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-xl w-[90vw] h-[90vh] flex flex-col">
       {/* Header */}
       <div className="flex justify-between items-center p-4 border-b border-gray-700">
         <h3 className="text-white font-bold text-lg">💎 Skill Gem Management</h3>
@@ -643,7 +649,19 @@ export const SkillGemPanel = React.memo(function SkillGemPanel({ isOpen, onClose
                     <h4 className="text-white font-semibold mb-2">Unlocked Skills</h4>
                     <div className="grid grid-cols-1 gap-2">
                       {filteredSkills.filter(s => s.isUnlocked).map(skill => (
-                        <div key={skill.id} className="bg-gray-800 p-3 rounded flex items-center justify-between hover:bg-gray-750 cursor-pointer" onClick={() => setSelectedSkill(skill)}>
+                        <div 
+                          key={skill.id} 
+                          className="bg-gray-800 p-3 rounded flex items-center justify-between hover:bg-gray-750 cursor-pointer" 
+                          onClick={() => setSelectedSkill(skill)}
+                          onMouseEnter={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect()
+                            setTooltip({
+                              skill,
+                              position: { x: rect.right + 10, y: rect.top }
+                            })
+                          }}
+                          onMouseLeave={() => setTooltip(null)}
+                        >
                           <div className="flex items-center space-x-3">
                             <span className="text-xl">{skill.icon}</span>
                             <div>
@@ -678,7 +696,19 @@ export const SkillGemPanel = React.memo(function SkillGemPanel({ isOpen, onClose
                     <h4 className="text-white font-semibold mb-2">Available Skills</h4>
                     <div className="grid grid-cols-1 gap-2">
                       {filteredSkills.filter(s => !s.isUnlocked).map(skill => (
-                        <div key={skill.id} className="bg-gray-800 p-3 rounded flex items-center justify-between opacity-75 hover:opacity-100 cursor-pointer" onClick={() => setSelectedSkill(skill)}>
+                        <div 
+                          key={skill.id} 
+                          className="bg-gray-800 p-3 rounded flex items-center justify-between opacity-75 hover:opacity-100 cursor-pointer" 
+                          onClick={() => setSelectedSkill(skill)}
+                          onMouseEnter={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect()
+                            setTooltip({
+                              skill,
+                              position: { x: rect.right + 10, y: rect.top }
+                            })
+                          }}
+                          onMouseLeave={() => setTooltip(null)}
+                        >
                           <div className="flex items-center space-x-3">
                             <span className="text-xl">{skill.icon}</span>
                             <div>
@@ -813,6 +843,16 @@ export const SkillGemPanel = React.memo(function SkillGemPanel({ isOpen, onClose
             )}
           </div>
         )}
+      </div>
+      
+      {/* Tooltip */}
+      {tooltip && (
+        <SkillGemTooltip
+          skill={tooltip.skill}
+          position={tooltip.position}
+          onClose={() => setTooltip(null)}
+        />
+      )}
       </div>
     </div>
   )

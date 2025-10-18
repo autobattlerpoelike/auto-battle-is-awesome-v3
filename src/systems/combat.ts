@@ -98,8 +98,8 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
   const p = {...player}
   const e = {...enemy}
   
-  // Use calculated stats from the new system, with fallback to player stats
-  const stats: EquipmentStats & Player = { ...p, ...p.calculatedStats }
+  // Use the player's calculated stats (which include equipment and stone bonuses)
+  const stats = p
   
   // Player attack phase - use new dodge calculation
   let playerDodgeChance = (stats.dodgeChance || 0) + (p.skills?.agility || 0) * 0.01
@@ -137,6 +137,7 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
   if (didPlayerHit) {
     // Calculate player damage using new system
     let baseDmg = Math.max(1, Math.floor(stats.dps || p.dps || 1))
+    console.log(`Combat: Player DPS = ${stats.dps}, Base damage = ${baseDmg}`)
     
     // Add attribute bonuses
     if (p.attributes) {

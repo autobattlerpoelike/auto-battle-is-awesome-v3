@@ -5,6 +5,7 @@ import {
   WEAPON_AFFIXES, ARMOR_AFFIXES, ACCESSORY_AFFIXES, RARITIES,
   EquipmentStats, Attribute
 } from './equipment'
+import { getMaxSockets } from './stoneGenerator'
 
 // Optimized weighted random selection helper with caching
 const weightCache = new Map<string, number>()
@@ -48,8 +49,10 @@ function chooseRarity(level: number, isBoss: boolean = false): string {
       { item: 'Common', weight: 60 },
       { item: 'Magic', weight: 25 },
       { item: 'Rare', weight: 10 },
-      { item: 'Unique', weight: 4 },
-      { item: 'Legendary', weight: 1 }
+      { item: 'Legendary', weight: 4 },
+      { item: 'Mythic', weight: 2 },
+      { item: 'Divine', weight: 1 },
+      { item: 'Unique', weight: 1 }
     ]
     
     // Adjust weights based on level and boss status
@@ -59,14 +62,18 @@ function chooseRarity(level: number, isBoss: boolean = false): string {
       // Higher level = better loot
       if (item === 'Magic') adjustedWeight += Math.floor(level / 5)
       if (item === 'Rare') adjustedWeight += Math.floor(level / 10)
-      if (item === 'Unique') adjustedWeight += Math.floor(level / 20)
-      if (item === 'Legendary') adjustedWeight += Math.floor(level / 50)
+      if (item === 'Legendary') adjustedWeight += Math.floor(level / 20)
+      if (item === 'Mythic') adjustedWeight += Math.floor(level / 40)
+      if (item === 'Divine') adjustedWeight += Math.floor(level / 60)
+      if (item === 'Unique') adjustedWeight += Math.floor(level / 50)
       
       // Boss bonus
       if (isBoss) {
         if (item === 'Rare') adjustedWeight += 5
+        if (item === 'Legendary') adjustedWeight += 4
+        if (item === 'Mythic') adjustedWeight += 3
+        if (item === 'Divine') adjustedWeight += 2
         if (item === 'Unique') adjustedWeight += 3
-        if (item === 'Legendary') adjustedWeight += 2
       }
       
       return { item, weight: Math.max(1, adjustedWeight) }
@@ -110,8 +117,10 @@ function chooseDamageType(weaponType: WeaponType, rarity: string): DamageType {
     Common: 0.1,
     Magic: 0.3,
     Rare: 0.5,
-    Unique: 0.7,
-    Legendary: 0.9
+    Legendary: 0.7,
+    Mythic: 0.8,
+    Divine: 0.9,
+    Unique: 0.85
   }[rarity] || 0.1
   
   if (Math.random() < elementalChance && availableTypes.length > 1) {
@@ -162,13 +171,15 @@ function generateAffixes(category: 'weapon' | 'armor' | 'accessory', rarity: str
     // Scale affix value by level and rarity with random variation
     const baseScaledValue = selectedAffix.value * levelMultiplier * rarityMultiplier
     
-    // Add random variation to affix values (±10% to ±25% based on rarity)
+    // Add random variation to affix values (±10% to ±30% based on rarity)
     const affixVariationRange = {
       'Common': 0.10,
       'Magic': 0.15,
       'Rare': 0.18,
-      'Unique': 0.22,
-      'Legendary': 0.25
+      'Legendary': 0.22,
+      'Mythic': 0.25,
+      'Divine': 0.30,
+      'Unique': 0.28
     }[rarity] || 0.10
     
     const affixRandomVariation = 1 + (Math.random() * 2 - 1) * affixVariationRange
@@ -276,22 +287,26 @@ export function generateEquipment(level: number, fromBoss: boolean = false): Equ
   let damageType: DamageType | undefined
   
   // Get base equipment data
+  let visual: any = undefined
   if (category === 'weapon') {
     const weaponBase = WEAPON_BASES[type as WeaponType]
     baseStats = { ...weaponBase.baseStats }
     slot = weaponBase.slot
     requirements = { ...weaponBase.requirements }
+    visual = { ...weaponBase.visual }
     damageType = chooseDamageType(type as WeaponType, rarity)
   } else if (category === 'armor') {
     const armorBase = ARMOR_BASES[type as ArmorType]
     baseStats = { ...armorBase.baseStats }
     slot = armorBase.slot
     requirements = { ...armorBase.requirements }
+    visual = { ...armorBase.visual }
   } else {
     const accessoryBase = ACCESSORY_BASES[type as AccessoryType]
     baseStats = { ...accessoryBase.baseStats }
     slot = accessoryBase.slot
     requirements = { ...accessoryBase.requirements }
+    // Accessories don't have visual data by default
   }
   
   // Scale base stats by level and rarity with random variation
@@ -305,13 +320,15 @@ export function generateEquipment(level: number, fromBoss: boolean = false): Equ
   
   Object.keys(baseStats).forEach(stat => {
     if (typeof (baseStats as any)[stat] === 'number') {
-      // Add random variation to base stats (±15% for Common, up to ±35% for Legendary)
+      // Add random variation to base stats (±15% for Common, up to ±40% for Divine)
       const variationRange = {
         'Common': 0.15,
         'Magic': 0.20,
         'Rare': 0.25,
-        'Unique': 0.30,
-        'Legendary': 0.35
+        'Legendary': 0.30,
+        'Mythic': 0.35,
+        'Divine': 0.40,
+        'Unique': 0.38
       }[rarity] || 0.15
       
       // Generate random multiplier between (1 - variation) and (1 + variation)
@@ -331,6 +348,31 @@ export function generateEquipment(level: number, fromBoss: boolean = false): Equ
   // Calculate value
   const value = calculateValue(baseStats, affixes, rarity, level)
   
+  // Generate sockets based on rarity
+  const maxSockets = getMaxSockets(rarity)
+  const sockets = maxSockets > 0 ? {
+    stones: new Array(maxSockets).fill(null),
+    maxSockets
+  } : undefined
+
+  // Update visual data based on rarity and level
+  if (visual) {
+    // Update sprite ID based on rarity for better visual progression
+    const rarityTiers = ['Common', 'Magic', 'Rare', 'Legendary', 'Mythic', 'Divine', 'Unique']
+    const tierIndex = rarityTiers.indexOf(rarity)
+    
+    if (category === 'weapon' && type === 'sword') {
+      visual.spriteId = tierIndex >= 1 ? 'steel_sword' : 'iron_sword'
+    } else if (category === 'armor' && type === 'chest') {
+      visual.spriteId = tierIndex >= 1 ? 'chain_chest' : 'leather_chest'
+    }
+    
+    // Add color tint based on rarity
+    if (tierIndex >= 2) {
+      visual.color = RARITIES[rarity as keyof typeof RARITIES]?.color
+    }
+  }
+  
   return {
     id: 'eq_' + Math.random().toString(36).substr(2, 9),
     name,
@@ -343,7 +385,9 @@ export function generateEquipment(level: number, fromBoss: boolean = false): Equ
     affixes,
     damageType,
     requirements,
-    value
+    value,
+    sockets,
+    visual
   }
 }
 

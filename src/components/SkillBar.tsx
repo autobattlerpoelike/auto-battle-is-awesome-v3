@@ -41,6 +41,9 @@ export function SkillBar({ className = '' }: SkillBarProps) {
 
   const handleUnequipSkill = (slotIndex: number, e: React.MouseEvent) => {
     e.stopPropagation()
+    console.log(`🔧 Attempting to unequip skill from slot ${slotIndex}`)
+    const skill = getEquippedSkill(slotIndex)
+    console.log(`🔧 Skill to unequip:`, skill)
     actions.unequipSkillFromBar(slotIndex)
     setSelectedSlot(null)
   }
@@ -93,8 +96,11 @@ export function SkillBar({ className = '' }: SkillBarProps) {
               <div 
                 className="skill-tooltip"
                 style={{
-                  left: Math.min(tooltipPosition.x, window.innerWidth - 400),
-                  top: Math.min(tooltipPosition.y, window.innerHeight - 300)
+                  left: Math.max(10, Math.min(tooltipPosition.x, window.innerWidth - 420)),
+                  top: Math.max(10, Math.min(tooltipPosition.y, window.innerHeight - 350)),
+                  maxWidth: '400px',
+                  maxHeight: '340px',
+                  overflow: 'auto'
                 }}
                 onClick={(e) => e.stopPropagation()}
               >

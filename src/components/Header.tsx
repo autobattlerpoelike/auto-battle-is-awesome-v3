@@ -32,14 +32,21 @@ export default function Header({ onOpenModal }: HeaderProps) {
               onClick={() => onOpenModal('skills')}
               className="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-800/60 border border-blue-600/50 text-blue-300 rounded-md transition-all duration-200 text-sm font-medium hover:shadow-lg hover:shadow-blue-500/20"
             >
-              🎯 Skills
+              📊 Bonuses
             </button>
             <button 
-              onClick={() => onOpenModal('combinations')}
-              className="px-3 py-1.5 bg-pink-900/50 hover:bg-pink-800/60 border border-pink-600/50 text-pink-300 rounded-md transition-all duration-200 text-sm font-medium hover:shadow-lg hover:shadow-pink-500/20"
+              onClick={() => onOpenModal('passiveTree')}
+              className="px-3 py-1.5 bg-green-900/50 hover:bg-green-800/60 border border-green-600/50 text-green-300 rounded-md transition-all duration-200 text-sm font-medium hover:shadow-lg hover:shadow-green-500/20"
             >
-              🔗 Combinations
+              🌳 Passive Tree
             </button>
+            <button 
+              onClick={() => onOpenModal('stones')}
+              className="px-3 py-1.5 bg-amber-900/50 hover:bg-amber-800/60 border border-amber-600/50 text-amber-300 rounded-md transition-all duration-200 text-sm font-medium hover:shadow-lg hover:shadow-amber-500/20"
+            >
+              💎 Stones
+            </button>
+
             <button 
               onClick={() => onOpenModal('maps')}
               className="px-3 py-1.5 bg-indigo-900/50 hover:bg-indigo-800/60 border border-indigo-600/50 text-indigo-300 rounded-md transition-all duration-200 text-sm font-medium hover:shadow-lg hover:shadow-indigo-500/20"

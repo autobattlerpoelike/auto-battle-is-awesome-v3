@@ -1,4 +1,5 @@
 // Skill Gem System Types and Data
+import { calculatePassiveTreeStats } from './passiveTree'
 
 export type SkillGemType = 'active' | 'support'
 export type SkillGemCategory = 'attack' | 'spell' | 'aura' | 'movement' | 'utility'
@@ -50,6 +51,8 @@ export interface SkillScaling {
   areaPerLevel?: number
   baseDuration?: number
   durationPerLevel?: number
+  baseRange?: number
+  rangePerLevel?: number
 }
 
 export interface SkillGem {
@@ -210,265 +213,9 @@ export const MAIN_SKILL_GEMS: Omit<SkillGem, 'level' | 'isUnlocked' | 'isEquippe
       baseCooldown: 0, // No cooldown for automated combat
       cooldownReductionPerLevel: 0,
       baseArea: 1.5,
-      areaPerLevel: 0.1
-    }
-  },
-  {
-    id: 'lightning_bolt',
-    name: 'Lightning Bolt',
-    description: 'Strikes a single enemy with a bolt of lightning, dealing high electrical damage.',
-    type: 'active',
-    category: 'spell',
-    tags: ['Spell', 'Lightning'],
-    maxLevel: 20,
-    unlockLevel: 0, // Auto-unlock (no requirements)
-    skillPointCost: 0, // Free to unlock
-    manaCost: 0, // No mana cost for automated combat
-    cooldown: 0, // No cooldown for automated combat
-    icon: '⚡',
-    rarity: 'Normal', // Default rarity
-    quality: 0, // Base quality
-    scaling: {
-      baseDamage: 20,
-      damagePerLevel: 4,
-      baseManaCost: 0, // No mana cost for automated combat
-      manaCostPerLevel: 0,
-      baseCooldown: 0, // No cooldown for automated combat
-      cooldownReductionPerLevel: 0
-    }
-  },
-  {
-    id: 'ice_shard',
-    name: 'Ice Shard',
-    description: 'Launches multiple ice projectiles that pierce through enemies, dealing cold damage and slowing them.',
-    type: 'active',
-    category: 'spell',
-    tags: ['Spell', 'Projectile', 'Cold'],
-    maxLevel: 20,
-    unlockLevel: 0,
-    skillPointCost: 0,
-    manaCost: 0,
-    cooldown: 0,
-    icon: '❄️',
-    rarity: 'Normal',
-    quality: 0,
-    scaling: {
-      baseDamage: 8,
-      damagePerLevel: 1.8,
-      baseManaCost: 0,
-      manaCostPerLevel: 0,
-      baseCooldown: 0,
-      cooldownReductionPerLevel: 0
-    }
-  },
-  {
-    id: 'ground_slam',
-    name: 'Ground Slam',
-    description: 'Slams the ground with tremendous force, creating a shockwave that damages enemies in a cone.',
-    type: 'active',
-    category: 'attack',
-    tags: ['Attack', 'AoE', 'Slam', 'Physical'],
-    maxLevel: 20,
-    unlockLevel: 0,
-    skillPointCost: 0,
-    manaCost: 0,
-    cooldown: 0,
-    icon: '🔨',
-    rarity: 'Normal',
-    quality: 0,
-    scaling: {
-      baseDamage: 18,
-      damagePerLevel: 3.5,
-      baseManaCost: 0,
-      manaCostPerLevel: 0,
-      baseCooldown: 0,
-      cooldownReductionPerLevel: 0,
-      baseArea: 2.0,
-      areaPerLevel: 0.12
-    }
-  },
-  {
-    id: 'poison_arrow',
-    name: 'Poison Arrow',
-    description: 'Fires a poisoned arrow that creates a toxic cloud on impact, dealing chaos damage over time.',
-    type: 'active',
-    category: 'attack',
-    tags: ['Attack', 'Projectile', 'AoE', 'Chaos', 'Duration', 'Bow'],
-    maxLevel: 20,
-    unlockLevel: 0,
-    skillPointCost: 0,
-    manaCost: 0,
-    cooldown: 0,
-    icon: '🏹',
-    rarity: 'Normal',
-    quality: 0,
-    scaling: {
-      baseDamage: 10,
-      damagePerLevel: 2.2,
-      baseManaCost: 0,
-      manaCostPerLevel: 0,
-      baseCooldown: 0,
-      cooldownReductionPerLevel: 0,
-      baseArea: 1.8,
-      areaPerLevel: 0.08,
-      baseDuration: 3000,
-      durationPerLevel: 150
-    }
-  },
-  {
-    id: 'chain_lightning',
-    name: 'Chain Lightning',
-    description: 'Casts lightning that jumps between enemies, dealing electrical damage to multiple targets.',
-    type: 'active',
-    category: 'spell',
-    tags: ['Spell', 'Lightning', 'AoE'],
-    maxLevel: 20,
-    unlockLevel: 0,
-    skillPointCost: 0,
-    manaCost: 0,
-    cooldown: 0,
-    icon: '⚡',
-    rarity: 'Normal',
-    quality: 0,
-    scaling: {
-      baseDamage: 14,
-      damagePerLevel: 2.8,
-      baseManaCost: 0,
-      manaCostPerLevel: 0,
-      baseCooldown: 0,
-      cooldownReductionPerLevel: 0
-    }
-  },
-  {
-    id: 'meteor',
-    name: 'Meteor',
-    description: 'Calls down a massive meteor from the sky that deals devastating fire damage in a large area.',
-    type: 'active',
-    category: 'spell',
-    tags: ['Spell', 'AoE', 'Fire'],
-    maxLevel: 20,
-    unlockLevel: 0,
-    skillPointCost: 0,
-    manaCost: 0,
-    cooldown: 0,
-    icon: '☄️',
-    rarity: 'Normal',
-    quality: 0,
-    scaling: {
-      baseDamage: 25,
-      damagePerLevel: 5,
-      baseManaCost: 0,
-      manaCostPerLevel: 0,
-      baseCooldown: 0,
-      cooldownReductionPerLevel: 0,
-      baseArea: 3.0,
-      areaPerLevel: 0.2
-    }
-  },
-  {
-    id: 'blade_vortex',
-    name: 'Blade Vortex',
-    description: 'Creates spinning blades around the character that continuously damage nearby enemies.',
-    type: 'active',
-    category: 'spell',
-    tags: ['Spell', 'AoE', 'Duration', 'Physical'],
-    maxLevel: 20,
-    unlockLevel: 0,
-    skillPointCost: 0,
-    manaCost: 0,
-    cooldown: 0,
-    icon: '🗡️',
-    rarity: 'Normal',
-    quality: 0,
-    scaling: {
-      baseDamage: 8,
-      damagePerLevel: 1.6,
-      baseManaCost: 0,
-      manaCostPerLevel: 0,
-      baseCooldown: 0,
-      cooldownReductionPerLevel: 0,
-      baseArea: 2.2,
       areaPerLevel: 0.1,
-      baseDuration: 5000,
-      durationPerLevel: 200
-    }
-  },
-  {
-    id: 'frost_nova',
-    name: 'Frost Nova',
-    description: 'Releases a burst of cold energy that freezes and damages all nearby enemies.',
-    type: 'active',
-    category: 'spell',
-    tags: ['Spell', 'AoE', 'Cold'],
-    maxLevel: 20,
-    unlockLevel: 0,
-    skillPointCost: 0,
-    manaCost: 0,
-    cooldown: 0,
-    icon: '❄️',
-    rarity: 'Normal',
-    quality: 0,
-    scaling: {
-      baseDamage: 16,
-      damagePerLevel: 3.2,
-      baseManaCost: 0,
-      manaCostPerLevel: 0,
-      baseCooldown: 0,
-      cooldownReductionPerLevel: 0,
-      baseArea: 2.8,
-      areaPerLevel: 0.14
-    }
-  },
-  {
-    id: 'cleave',
-    name: 'Cleave',
-    description: 'Attacks with both weapons, hitting enemies in front of you with increased damage.',
-    type: 'active',
-    category: 'attack',
-    tags: ['Attack', 'AoE', 'Melee', 'Physical'],
-    maxLevel: 20,
-    unlockLevel: 0,
-    skillPointCost: 0,
-    manaCost: 0,
-    cooldown: 0,
-    icon: '⚔️',
-    rarity: 'Normal',
-    quality: 0,
-    scaling: {
-      baseDamage: 14,
-      damagePerLevel: 2.8,
-      baseManaCost: 0,
-      manaCostPerLevel: 0,
-      baseCooldown: 0,
-      cooldownReductionPerLevel: 0,
-      baseArea: 1.5,
-      areaPerLevel: 0.08
-    }
-  },
-  {
-    id: 'summon_skeletons',
-    name: 'Summon Skeletons',
-    description: 'Raises skeleton warriors from the ground to fight alongside you.',
-    type: 'active',
-    category: 'spell',
-    tags: ['Spell', 'Minion', 'Duration'],
-    maxLevel: 20,
-    unlockLevel: 0,
-    skillPointCost: 0,
-    manaCost: 0,
-    cooldown: 0,
-    icon: '💀',
-    rarity: 'Normal',
-    quality: 0,
-    scaling: {
-      baseDamage: 6,
-      damagePerLevel: 1.2,
-      baseManaCost: 0,
-      manaCostPerLevel: 0,
-      baseCooldown: 0,
-      cooldownReductionPerLevel: 0,
-      baseDuration: 10000,
-      durationPerLevel: 500
+      baseRange: 300, // Reasonable ranged combat distance
+      rangePerLevel: 10 // Moderate range increase with skill level
     }
   }
 ]
@@ -945,6 +692,11 @@ export function getScaledDuration(skill: SkillGem): number {
   return (skill.scaling.baseDuration + (skill.scaling.durationPerLevel || 0) * (skill.level - 1)) / 1000
 }
 
+export function getScaledRange(skill: SkillGem): number {
+  if (!skill.scaling || !skill.scaling.baseRange) return 0
+  return skill.scaling.baseRange + (skill.scaling.rangePerLevel || 0) * (skill.level - 1)
+}
+
 export function getScaledSupportGemValue(supportGem: SupportGem): number {
   if (!supportGem.scaling) return supportGem.modifiers[0]?.value || 0
   return Math.floor(supportGem.scaling.baseValue + supportGem.scaling.valuePerLevel * (supportGem.level - 1))
@@ -1105,8 +857,8 @@ export function applyModifiersToSkill(skill: SkillGem): {
 
   return {
     damage: Math.round(damage),
-    manaCost: Math.max(1, Math.round(manaCost)),
-    cooldown: Math.max(100, Math.round(cooldown)),
+    manaCost: Math.round(manaCost),
+    cooldown: Math.round(cooldown),
     area: Math.round(area * 100) / 100, // Round to 2 decimal places
     duration: Math.round(duration),
     projectileCount: Math.max(1, Math.round(projectileCount))
@@ -1125,6 +877,92 @@ export function getSkillFinalDamage(skill: SkillGem): number {
   return applyModifiersToSkill(skill).damage
 }
 
+// Comprehensive skill damage calculation that integrates character stats
+export function calculateSkillDamageWithStats(skill: SkillGem, player: any): number {
+  // Get base skill damage with support gem modifiers
+  const modifiedSkill = applyModifiersToSkill(skill)
+  let damage = modifiedSkill.damage
+  
+  // Get player attributes with defaults
+  const attributes = player.attributes || {}
+  const strength = attributes.strength || 10
+  const intelligence = attributes.intelligence || 10
+  const dexterity = attributes.dexterity || 10
+  const luck = attributes.luck || 5
+  
+  // Get player's calculated stats (includes equipment and passive tree bonuses)
+  const playerDps = player.dps || player.baseDps || 2
+  const critChance = player.critChance || 0
+  
+  // Determine skill damage type based on skill tags and ID
+  const isPhysicalSkill = skill.tags.includes('Physical') || 
+                         ['power_strike', 'cleave', 'ground_slam', 'whirlwind'].includes(skill.id)
+  const isElementalSkill = skill.tags.includes('Fire') || skill.tags.includes('Lightning') || 
+                          skill.tags.includes('Cold') || 
+                          ['fireball', 'lightning_bolt', 'ice_shard', 'chain_lightning', 'meteor', 'frost_nova'].includes(skill.id)
+  const isProjectileSkill = skill.tags.includes('Projectile') || 
+                           ['fireball', 'lightning_bolt', 'ice_shard', 'poison_arrow'].includes(skill.id)
+  
+  // Base damage scaling with player DPS (represents weapon damage contribution)
+  const weaponDamageContribution = playerDps * 0.3 // 30% of player DPS contributes to skill damage
+  damage += weaponDamageContribution
+  
+  // Attribute-based damage bonuses
+  if (isPhysicalSkill) {
+    // Strength heavily benefits physical skills
+    const strengthBonus = Math.max(0, strength - 10) * 1.5
+    damage += strengthBonus
+    console.log(`Physical skill ${skill.name}: +${strengthBonus.toFixed(1)} damage from ${strength} strength`)
+  }
+  
+  if (isElementalSkill) {
+    // Intelligence heavily benefits elemental skills
+    const intelligenceBonus = Math.max(0, intelligence - 10) * 1.8
+    damage += intelligenceBonus
+    console.log(`Elemental skill ${skill.name}: +${intelligenceBonus.toFixed(1)} damage from ${intelligence} intelligence`)
+  }
+  
+  if (isProjectileSkill) {
+    // Dexterity benefits projectile skills
+    const dexterityBonus = Math.max(0, dexterity - 10) * 1.2
+    damage += dexterityBonus
+    console.log(`Projectile skill ${skill.name}: +${dexterityBonus.toFixed(1)} damage from ${dexterity} dexterity`)
+  }
+  
+  // All skills get a small bonus from dexterity (general damage)
+  const generalDexBonus = Math.max(0, dexterity - 10) * 0.5
+  damage += generalDexBonus
+  
+  // Luck increases all skill damage slightly
+  const luckBonus = Math.max(0, luck - 5) * 0.8
+  damage += luckBonus
+  
+  // Apply equipment damage bonuses (already included in player.dps, but add direct damage bonuses)
+  if (player.calculatedStats && player.calculatedStats.damage) {
+    const equipmentDamageBonus = player.calculatedStats.damage * 0.4 // 40% of equipment damage applies to skills
+    damage += equipmentDamageBonus
+    console.log(`Skill ${skill.name}: +${equipmentDamageBonus.toFixed(1)} damage from equipment`)
+  }
+  
+  // Apply passive tree damage bonuses
+  if (player.passiveTreeData && player.passiveTreeState) {
+    const passiveStats = calculatePassiveTreeStats(player.passiveTreeData, player.passiveTreeState)
+    if (passiveStats.damage) {
+      const passiveDamageBonus = passiveStats.damage * 0.5 // 50% of passive damage applies to skills
+      damage += passiveDamageBonus
+      console.log(`Skill ${skill.name}: +${passiveDamageBonus.toFixed(1)} damage from passive tree`)
+    }
+  }
+  
+  // Level scaling bonus (skills get stronger with player level)
+  const levelBonus = (player.level || 1) * 0.5
+  damage += levelBonus
+  
+  console.log(`Final damage calculation for ${skill.name}: ${Math.floor(damage)} (base: ${modifiedSkill.damage}, with stats: ${damage.toFixed(1)})`)
+  
+  return Math.floor(Math.max(1, damage)) // Ensure minimum 1 damage
+}
+
 export function calculateSkillManaCost(skill: SkillGem): number {
   return applyModifiersToSkill(skill).manaCost
 }
@@ -1134,11 +972,14 @@ export function calculateSkillCooldown(skill: SkillGem): number {
 }
 
 export function createDefaultSkillGem(template: typeof MAIN_SKILL_GEMS[0]): SkillGem {
+  // Auto-equip multiple skills by default to match skillBar initialization
+  const autoEquippedSkills: string[] = ['fireball', 'lightning_bolt', 'ice_shard', 'whirlwind']
+  
   return {
     ...template,
     level: 1,
     isUnlocked: true, // Auto-unlock all skill gems (unlockLevel is 0)
-    isEquipped: template.id === 'whirlwind', // Equip Whirlwind by default
+    isEquipped: autoEquippedSkills.includes(template.id), // Multiple skills equipped by default
     supportGems: []
   }
 }
@@ -1152,15 +993,21 @@ export function createDefaultSupportGem(template: typeof SUPPORT_GEMS[0]): Suppo
 }
 
 export function createDefaultSkillBar(): SkillBar {
-  // Create the default Whirlwind skill for slot 0
-  const whirlwindTemplate = MAIN_SKILL_GEMS.find(template => template.id === 'whirlwind')
-  const defaultWhirlwind = whirlwindTemplate ? createDefaultSkillGem(whirlwindTemplate) : null
-  
-  // Initialize slots with Whirlwind in the first slot
+  // Create skill bar with multiple skills equipped for better auto-combat experience
   const slots = new Array(6).fill(null)
-  if (defaultWhirlwind) {
-    slots[0] = defaultWhirlwind
-  }
+  
+  // Auto-equip multiple skills for engaging combat
+  const defaultSkillIds = ['fireball', 'lightning_bolt', 'ice_shard', 'whirlwind']
+  
+  defaultSkillIds.forEach((skillId, index) => {
+    const skillTemplate = MAIN_SKILL_GEMS.find(template => template.id === skillId)
+    if (skillTemplate && index < slots.length) {
+      slots[index] = {
+        ...createDefaultSkillGem(skillTemplate),
+        isEquipped: true
+      }
+    }
+  })
   
   return {
     slots,

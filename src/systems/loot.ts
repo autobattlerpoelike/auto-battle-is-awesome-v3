@@ -1,6 +1,7 @@
 import { DamageType } from './combat'
 import { generateEquipment, getEquipmentColor } from './equipmentGenerator'
 import { Equipment, RARITIES } from './equipment'
+import { generateStone } from './stoneGenerator'
 
 // Object pool for equipment items to reduce garbage collection
 const equipmentPool: any[] = []
@@ -123,18 +124,20 @@ export function generateLoot(level: number, fromBoss: boolean = false): any[] {
     Math.floor(Math.random() * 3) + 2 : // 2-4 items for bosses
     Math.floor(Math.random() * 2) + 1   // 1-2 items for normal enemies
   
-  if (numItems === 1) {
-    // Fast path for single item
-    const equipment = generateEquipment(level, fromBoss)
-    return [convertEquipmentToLegacyFormat(equipment)]
-  }
-  
-  // Multiple items path
   const loot = []
+  
+  // Generate equipment items
   for (let i = 0; i < numItems; i++) {
     const equipment = generateEquipment(level, fromBoss)
     const convertedEquipment = convertEquipmentToLegacyFormat(equipment)
     loot.push(convertedEquipment)
+  }
+  
+  // Stone drop chance: 15% for normal enemies, 35% for bosses
+  const stoneDropChance = fromBoss ? 0.35 : 0.15
+  if (Math.random() < stoneDropChance) {
+    const stone = generateStone(level, fromBoss)
+    loot.push(stone)
   }
   
   return loot

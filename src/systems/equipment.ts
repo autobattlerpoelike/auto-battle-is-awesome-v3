@@ -52,6 +52,33 @@ export interface EquipmentStats {
   lifeSteal?: number
   manaSteal?: number
   thorns?: number
+  
+  // Elemental damage bonuses
+  fireDamage?: number
+  iceDamage?: number
+  lightningDamage?: number
+  poisonDamage?: number
+  
+  // Elemental resistances
+  fireResistance?: number
+  iceResistance?: number
+  lightningResistance?: number
+  poisonResistance?: number
+  
+  // Advanced combat stats
+  armorPenetration?: number
+  damageMultiplier?: number
+  stunChance?: number
+  damageReduction?: number
+  movementSpeed?: number
+  reflectDamage?: number
+  
+  // Special utility effects
+  doubleDropChance?: number
+  cleaveChance?: number
+  spellResistance?: number
+  stunResistance?: number
+  cooldownReduction?: number
 }
 
 // Affix Types
@@ -77,6 +104,19 @@ export interface Equipment {
   damageType?: DamageType
   requirements?: Partial<Record<Attribute, number>>
   value: number
+  // Stone socket system
+  sockets?: {
+    stones: (string | null)[] // Array of stone IDs, null for empty sockets
+    maxSockets: number
+  }
+  // Visual data for sprite rendering
+  visual?: {
+    spriteSheet: string // Path to sprite sheet
+    spriteId: string // ID of the sprite within the sheet
+    layer: number // Rendering layer (0 = behind character, 1 = on character, 2 = in front)
+    color?: string // Optional color tint
+    scale?: number // Optional scale multiplier
+  }
 }
 
 // Base Equipment Definitions
@@ -86,62 +126,107 @@ export const WEAPON_BASES: Record<WeaponType, {
   baseStats: EquipmentStats
   damageTypes: DamageType[]
   requirements: Partial<Record<Attribute, number>>
+  visual: {
+    spriteSheet: string
+    spriteId: string
+    layer: number
+  }
 }> = {
   sword: {
     name: 'Sword',
     slot: 'weapon',
     baseStats: { damage: 8 },
     damageTypes: ['physical', 'fire', 'ice', 'lightning'],
-    requirements: {} // Removed requirements
+    requirements: {}, // Removed requirements
+    visual: {
+      spriteSheet: '/auto-battle-is-awesome-v3/sprites/equipment/weapons/swords.svg',
+      spriteId: 'iron_sword',
+      layer: 2
+    }
   },
   axe: {
     name: 'Axe',
     slot: 'weapon',
     baseStats: { damage: 12, critChance: 0.05 },
     damageTypes: ['physical', 'fire'],
-    requirements: {} // Removed requirements
+    requirements: {}, // Removed requirements
+    visual: {
+      spriteSheet: '/auto-battle-is-awesome-v3/sprites/equipment/weapons/axes.svg',
+      spriteId: 'iron_axe',
+      layer: 2
+    }
   },
   mace: {
     name: 'Mace',
     slot: 'weapon',
     baseStats: { damage: 10, armor: 2 },
     damageTypes: ['physical', 'lightning'],
-    requirements: {} // Removed requirements
+    requirements: {}, // Removed requirements
+    visual: {
+      spriteSheet: '/auto-battle-is-awesome-v3/sprites/equipment/weapons/maces.svg',
+      spriteId: 'iron_mace',
+      layer: 2
+    }
   },
   dagger: {
     name: 'Dagger',
     slot: 'weapon',
     baseStats: { damage: 6, critChance: 0.1, attackSpeed: 0.3 },
     damageTypes: ['physical', 'poison'],
-    requirements: {} // Removed requirements
+    requirements: {}, // Removed requirements
+    visual: {
+      spriteSheet: '/auto-battle-is-awesome-v3/sprites/equipment/weapons/daggers.svg',
+      spriteId: 'iron_dagger',
+      layer: 2
+    }
   },
   bow: {
     name: 'Bow',
     slot: 'weapon',
     baseStats: { damage: 9, critChance: 0.08 },
     damageTypes: ['physical', 'fire', 'ice', 'poison'],
-    requirements: {} // Removed requirements
+    requirements: {}, // Removed requirements
+    visual: {
+      spriteSheet: '/auto-battle-is-awesome-v3/sprites/equipment/weapons/bows.svg',
+      spriteId: 'wooden_bow',
+      layer: 2
+    }
   },
   crossbow: {
     name: 'Crossbow',
     slot: 'weapon',
     baseStats: { damage: 14, critChance: 0.06 },
     damageTypes: ['physical', 'lightning'],
-    requirements: {} // Removed requirements
+    requirements: {}, // Removed requirements
+    visual: {
+      spriteSheet: '/auto-battle-is-awesome-v3/sprites/equipment/weapons/crossbows.svg',
+      spriteId: 'light_crossbow',
+      layer: 2
+    }
   },
   staff: {
     name: 'Staff',
     slot: 'weapon',
     baseStats: { damage: 7, mana: 20, manaRegen: 2 },
     damageTypes: ['fire', 'ice', 'lightning'],
-    requirements: {} // Removed requirements
+    requirements: {}, // Removed requirements
+    visual: {
+      spriteSheet: '/auto-battle-is-awesome-v3/sprites/equipment/weapons/staves.svg',
+      spriteId: 'wooden_staff',
+      layer: 2
+    }
   },
   wand: {
     name: 'Wand',
     slot: 'weapon',
     baseStats: { damage: 5, mana: 15, critChance: 0.07 },
     damageTypes: ['fire', 'ice', 'lightning', 'poison'],
-    requirements: {} // Removed requirements
+    requirements: {}, // Removed requirements
+    visual: {
+      spriteSheet: '/auto-battle-is-awesome-v3/sprites/equipment/weapons/wands.svg',
+      spriteId: 'basic_wand',
+      layer: 2
+    }
   }
 }
 
@@ -150,42 +235,77 @@ export const ARMOR_BASES: Record<ArmorType, {
   slot: EquipmentSlot
   baseStats: EquipmentStats
   requirements: Partial<Record<Attribute, number>>
+  visual: {
+    spriteSheet: string
+    spriteId: string
+    layer: number
+  }
 }> = {
   helm: {
     name: 'Helm',
     slot: 'helm',
     baseStats: { armor: 5, health: 15 },
-    requirements: {}
+    requirements: {},
+    visual: {
+      spriteSheet: '/auto-battle-is-awesome-v3/sprites/equipment/armor/helm.svg',
+      spriteId: 'leather_helm',
+      layer: 1
+    }
   },
   chest: {
     name: 'Chest Armor',
     slot: 'chest',
     baseStats: { armor: 12, health: 30 },
-    requirements: {}
+    requirements: {},
+    visual: {
+      spriteSheet: '/auto-battle-is-awesome-v3/sprites/equipment/armor/chest.svg',
+      spriteId: 'leather_chest',
+      layer: 1
+    }
   },
   legs: {
     name: 'Leg Armor',
     slot: 'legs',
     baseStats: { armor: 8, health: 20 },
-    requirements: {}
+    requirements: {},
+    visual: {
+      spriteSheet: '/auto-battle-is-awesome-v3/sprites/equipment/armor/legs.svg',
+      spriteId: 'leather_legs',
+      layer: 1
+    }
   },
   boots: {
     name: 'Boots',
     slot: 'boots',
     baseStats: { armor: 4, dodgeChance: 0.02 },
-    requirements: {}
+    requirements: {},
+    visual: {
+      spriteSheet: '/auto-battle-is-awesome-v3/sprites/equipment/armor/boots.svg',
+      spriteId: 'leather_boots',
+      layer: 1
+    }
   },
   gloves: {
     name: 'Gloves',
     slot: 'gloves',
     baseStats: { armor: 3, attackSpeed: 0.1 },
-    requirements: {}
+    requirements: {},
+    visual: {
+      spriteSheet: '/auto-battle-is-awesome-v3/sprites/equipment/armor/gloves.svg',
+      spriteId: 'leather_gloves',
+      layer: 1
+    }
   },
   shield: {
     name: 'Shield',
     slot: 'offhand',
     baseStats: { armor: 8, blockChance: 0.15 },
-    requirements: {} // Removed requirements
+    requirements: {}, // Removed requirements
+    visual: {
+      spriteSheet: '/auto-battle-is-awesome-v3/sprites/equipment/armor/shields.svg',
+      spriteId: 'wooden_shield',
+      layer: 0
+    }
   }
 }
 
@@ -267,7 +387,39 @@ export const WEAPON_AFFIXES: Affix[] = [
   // Thorns damage
   { name: 'of Thorns', stat: 'thorns', value: 3, tier: 1, weight: 40 },
   { name: 'of Spikes', stat: 'thorns', value: 7, tier: 2, weight: 25 },
-  { name: 'of Retaliation', stat: 'thorns', value: 12, tier: 3, weight: 12 }
+  { name: 'of Retaliation', stat: 'thorns', value: 12, tier: 3, weight: 12 },
+  
+  // Elemental damage bonuses
+  { name: 'of Flames', stat: 'fireDamage', value: 5, tier: 1, weight: 50 },
+  { name: 'of Inferno', stat: 'fireDamage', value: 12, tier: 2, weight: 30 },
+  { name: 'of the Phoenix', stat: 'fireDamage', value: 22, tier: 3, weight: 15 },
+  
+  { name: 'of Frost', stat: 'iceDamage', value: 4, tier: 1, weight: 50 },
+  { name: 'of Winter', stat: 'iceDamage', value: 10, tier: 2, weight: 30 },
+  { name: 'of the Glacier', stat: 'iceDamage', value: 18, tier: 3, weight: 15 },
+  
+  { name: 'of Sparks', stat: 'lightningDamage', value: 6, tier: 1, weight: 50 },
+  { name: 'of Thunder', stat: 'lightningDamage', value: 14, tier: 2, weight: 30 },
+  { name: 'of the Storm Lord', stat: 'lightningDamage', value: 25, tier: 3, weight: 15 },
+  
+  { name: 'of Venom', stat: 'poisonDamage', value: 3, tier: 1, weight: 45 },
+  { name: 'of Toxicity', stat: 'poisonDamage', value: 8, tier: 2, weight: 25 },
+  { name: 'of the Serpent', stat: 'poisonDamage', value: 15, tier: 3, weight: 12 },
+  
+  // Armor penetration
+  { name: 'of Piercing', stat: 'armorPenetration', value: 0.1, tier: 1, weight: 40 },
+  { name: 'of Sundering', stat: 'armorPenetration', value: 0.2, tier: 2, weight: 25 },
+  { name: 'of Devastation', stat: 'armorPenetration', value: 0.35, tier: 3, weight: 12 },
+  
+  // Damage multipliers
+  { name: 'of Amplification', stat: 'damageMultiplier', value: 0.08, tier: 1, weight: 35 },
+  { name: 'of Enhancement', stat: 'damageMultiplier', value: 0.15, tier: 2, weight: 20 },
+  { name: 'of Supremacy', stat: 'damageMultiplier', value: 0.25, tier: 3, weight: 10 },
+  
+  // Special weapon effects
+  { name: 'of Stunning', stat: 'stunChance', value: 0.05, tier: 1, weight: 30 },
+  { name: 'of Paralysis', stat: 'stunChance', value: 0.1, tier: 2, weight: 18 },
+  { name: 'of Incapacitation', stat: 'stunChance', value: 0.18, tier: 3, weight: 8 }
 ]
 
 export const ARMOR_AFFIXES: Affix[] = [
@@ -328,7 +480,39 @@ export const ARMOR_AFFIXES: Affix[] = [
   // Thorns for armor
   { name: 'of Spines', stat: 'thorns', value: 2, tier: 1, weight: 50 },
   { name: 'of Barbs', stat: 'thorns', value: 5, tier: 2, weight: 30 },
-  { name: 'of the Hedgehog', stat: 'thorns', value: 9, tier: 3, weight: 15 }
+  { name: 'of the Hedgehog', stat: 'thorns', value: 9, tier: 3, weight: 15 },
+  
+  // Elemental resistances
+  { name: 'of Fire Resistance', stat: 'fireResistance', value: 0.1, tier: 1, weight: 60 },
+  { name: 'of Fire Immunity', stat: 'fireResistance', value: 0.2, tier: 2, weight: 35 },
+  { name: 'of the Salamander', stat: 'fireResistance', value: 0.35, tier: 3, weight: 18 },
+  
+  { name: 'of Cold Resistance', stat: 'iceResistance', value: 0.1, tier: 1, weight: 60 },
+  { name: 'of Cold Immunity', stat: 'iceResistance', value: 0.2, tier: 2, weight: 35 },
+  { name: 'of the Yeti', stat: 'iceResistance', value: 0.35, tier: 3, weight: 18 },
+  
+  { name: 'of Lightning Resistance', stat: 'lightningResistance', value: 0.1, tier: 1, weight: 60 },
+  { name: 'of Lightning Immunity', stat: 'lightningResistance', value: 0.2, tier: 2, weight: 35 },
+  { name: 'of the Storm Walker', stat: 'lightningResistance', value: 0.35, tier: 3, weight: 18 },
+  
+  { name: 'of Poison Resistance', stat: 'poisonResistance', value: 0.12, tier: 1, weight: 55 },
+  { name: 'of Poison Immunity', stat: 'poisonResistance', value: 0.25, tier: 2, weight: 30 },
+  { name: 'of the Antidote', stat: 'poisonResistance', value: 0.4, tier: 3, weight: 15 },
+  
+  // Damage reduction
+  { name: 'of Absorption', stat: 'damageReduction', value: 0.05, tier: 1, weight: 45 },
+  { name: 'of Mitigation', stat: 'damageReduction', value: 0.1, tier: 2, weight: 25 },
+  { name: 'of the Fortress', stat: 'damageReduction', value: 0.18, tier: 3, weight: 12 },
+  
+  // Movement and utility
+  { name: 'of Swiftness', stat: 'movementSpeed', value: 0.1, tier: 1, weight: 40 },
+  { name: 'of Haste', stat: 'movementSpeed', value: 0.2, tier: 2, weight: 25 },
+  { name: 'of the Wind Walker', stat: 'movementSpeed', value: 0.35, tier: 3, weight: 12 },
+  
+  // Special defensive effects
+  { name: 'of Reflection', stat: 'reflectDamage', value: 0.1, tier: 1, weight: 35 },
+  { name: 'of Mirroring', stat: 'reflectDamage', value: 0.2, tier: 2, weight: 20 },
+  { name: 'of the Mirror Shield', stat: 'reflectDamage', value: 0.35, tier: 3, weight: 10 }
 ]
 
 export const ACCESSORY_AFFIXES: Affix[] = [
@@ -403,16 +587,50 @@ export const ACCESSORY_AFFIXES: Affix[] = [
   
   { name: 'of Energy', stat: 'mana', value: 30, tier: 1, weight: 60 },
   { name: 'of Greater Energy', stat: 'mana', value: 60, tier: 2, weight: 40 },
-  { name: 'of Superior Energy', stat: 'mana', value: 100, tier: 3, weight: 20 }
+  { name: 'of Superior Energy', stat: 'mana', value: 100, tier: 3, weight: 20 },
+  
+  // Special utility bonuses
+  { name: 'of Vampirism', stat: 'lifeSteal', value: 0.03, tier: 1, weight: 35 },
+  { name: 'of Blood Drinking', stat: 'lifeSteal', value: 0.06, tier: 2, weight: 20 },
+  { name: 'of the Vampire Lord', stat: 'lifeSteal', value: 0.12, tier: 3, weight: 10 },
+  
+  { name: 'of Siphoning', stat: 'manaSteal', value: 0.04, tier: 1, weight: 30 },
+  { name: 'of Draining', stat: 'manaSteal', value: 0.08, tier: 2, weight: 18 },
+  { name: 'of the Lich', stat: 'manaSteal', value: 0.15, tier: 3, weight: 8 },
+  
+  // Rare special effects
+  { name: 'of Doubling', stat: 'doubleDropChance', value: 0.05, tier: 2, weight: 15 },
+  { name: 'of Multiplication', stat: 'doubleDropChance', value: 0.1, tier: 3, weight: 8 },
+  { name: 'of the Twins', stat: 'doubleDropChance', value: 0.18, tier: 4, weight: 4 },
+  
+  { name: 'of Cleaving', stat: 'cleaveChance', value: 0.1, tier: 2, weight: 20 },
+  { name: 'of Splitting', stat: 'cleaveChance', value: 0.2, tier: 3, weight: 12 },
+  { name: 'of the Berserker', stat: 'cleaveChance', value: 0.35, tier: 4, weight: 6 },
+  
+  // Defensive utility
+  { name: 'of Warding', stat: 'spellResistance', value: 0.1, tier: 1, weight: 40 },
+  { name: 'of Protection', stat: 'spellResistance', value: 0.2, tier: 2, weight: 25 },
+  { name: 'of the Arcane Shield', stat: 'spellResistance', value: 0.35, tier: 3, weight: 12 },
+  
+  { name: 'of Stability', stat: 'stunResistance', value: 0.15, tier: 1, weight: 35 },
+  { name: 'of Steadfastness', stat: 'stunResistance', value: 0.3, tier: 2, weight: 20 },
+  { name: 'of the Immovable', stat: 'stunResistance', value: 0.5, tier: 3, weight: 10 },
+  
+  // Legendary effects
+  { name: 'of Time Dilation', stat: 'cooldownReduction', value: 0.1, tier: 3, weight: 8 },
+  { name: 'of Temporal Mastery', stat: 'cooldownReduction', value: 0.2, tier: 4, weight: 4 },
+  { name: 'of the Time Lord', stat: 'cooldownReduction', value: 0.35, tier: 5, weight: 2 }
 ]
 
 // Rarity definitions
 export const RARITIES = {
   Common: { color: '#9CA3AF', affixCount: [0, 1], statMultiplier: 1.0 },
-  Magic: { color: '#3B82F6', affixCount: [1, 2], statMultiplier: 1.3 },
-  Rare: { color: '#EAB308', affixCount: [2, 4], statMultiplier: 1.6 },
-  Unique: { color: '#A855F7', affixCount: [3, 5], statMultiplier: 2.2 },
-  Legendary: { color: '#F97316', affixCount: [4, 6], statMultiplier: 3.0 }
+  Magic: { color: '#3B82F6', affixCount: [2, 2], statMultiplier: 1.3 },
+  Rare: { color: '#EAB308', affixCount: [3, 3], statMultiplier: 1.6 },
+  Legendary: { color: '#F97316', affixCount: [4, 4], statMultiplier: 2.2 },
+  Mythic: { color: '#E879F9', affixCount: [5, 5], statMultiplier: 2.8 },
+  Divine: { color: '#06B6D4', affixCount: [6, 6], statMultiplier: 3.5 },
+  Unique: { color: '#A855F7', affixCount: [6, 6], statMultiplier: 3.0, hasSpecialModifiers: true }
 }
 
 // Equipment slot configuration for UI
@@ -428,3 +646,75 @@ export const EQUIPMENT_SLOTS = [
   { id: 'ring', name: 'Ring', icon: '💍', category: 'accessory' },
   { id: 'amulet', name: 'Amulet', icon: '📿', category: 'accessory' }
 ]
+
+// Stone Embedding Utility Functions
+export function embedStone(equipment: Equipment, stoneId: string, socketIndex: number): Equipment {
+  if (!equipment.sockets) {
+    throw new Error('Equipment has no sockets')
+  }
+  
+  if (socketIndex < 0 || socketIndex >= equipment.sockets.maxSockets) {
+    throw new Error('Invalid socket index')
+  }
+  
+  if (equipment.sockets.stones[socketIndex] !== null) {
+    throw new Error('Socket is already occupied')
+  }
+  
+  const updatedEquipment = { ...equipment }
+  updatedEquipment.sockets = {
+    ...equipment.sockets,
+    stones: [...equipment.sockets.stones]
+  }
+  updatedEquipment.sockets.stones[socketIndex] = stoneId
+  
+  return updatedEquipment
+}
+
+export function removeStone(equipment: Equipment, socketIndex: number): { equipment: Equipment, removedStoneId: string | null } {
+  if (!equipment.sockets) {
+    throw new Error('Equipment has no sockets')
+  }
+  
+  if (socketIndex < 0 || socketIndex >= equipment.sockets.maxSockets) {
+    throw new Error('Invalid socket index')
+  }
+  
+  const removedStoneId = equipment.sockets.stones[socketIndex]
+  
+  const updatedEquipment = { ...equipment }
+  updatedEquipment.sockets = {
+    ...equipment.sockets,
+    stones: [...equipment.sockets.stones]
+  }
+  updatedEquipment.sockets.stones[socketIndex] = null
+  
+  return { equipment: updatedEquipment, removedStoneId }
+}
+
+export function getAvailableSockets(equipment: Equipment): number[] {
+  if (!equipment.sockets) {
+    return []
+  }
+  
+  const availableSockets: number[] = []
+  for (let i = 0; i < equipment.sockets.maxSockets; i++) {
+    if (equipment.sockets.stones[i] === null) {
+      availableSockets.push(i)
+    }
+  }
+  
+  return availableSockets
+}
+
+export function getSocketedStones(equipment: Equipment): (string | null)[] {
+  if (!equipment.sockets) {
+    return []
+  }
+  
+  return [...equipment.sockets.stones]
+}
+
+export function hasAvailableSocket(equipment: Equipment): boolean {
+  return getAvailableSockets(equipment).length > 0
+}

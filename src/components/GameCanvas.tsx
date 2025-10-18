@@ -1,7 +1,10 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react'
 import { useGame } from '../systems/gameContext'
+import { getScaledRange } from '../systems/skillGems'
 
 const CANVAS_W = 1400, CANVAS_H = 700
+// Expanded world boundaries for seamless exploration
+const WORLD_WIDTH = 4000, WORLD_HEIGHT = 3000
 
 interface Position {
   x: number
@@ -24,6 +27,11 @@ interface Projectile {
   radius: number
   size: number
   glow?: boolean
+  type?: string // Add type for different projectile behaviors
+  trail?: boolean // Add trail effect
+  particles?: boolean // Add particle effects
+  rotation?: number // Add rotation for spinning projectiles
+  targetId?: string // Add target tracking
 }
 
 interface Effect {
@@ -52,6 +60,19 @@ interface Particle {
   glow?: boolean
 }
 
+interface TrailPoint {
+  x: number
+  y: number
+  age: number
+  maxAge: number
+}
+
+interface ProjectileTrail {
+  projectileId: string
+  points: TrailPoint[]
+  color: string
+}
+
 function rarityColor(r: string | undefined): string {
   if (!r) return '#ffffff'
   if (r === 'Common') return '#ffffff'
@@ -64,13 +85,15 @@ function rarityColor(r: string | undefined): string {
 const GameCanvas = React.memo(function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { state, actions } = useGame()
-  const [playerPos, setPlayerPos] = useState<Position>({ x:150, y: CANVAS_H/2 })
+  const [playerPos, setPlayerPos] = useState<Position>({ x: WORLD_WIDTH / 2, y: WORLD_HEIGHT / 2 }) // World coordinates - player starts at center
   const [enemyPositions, setEnemyPositions] = useState<Record<string, Position>>({})
   const [projectiles, setProjectiles] = useState<Projectile[]>([])
+  const [projectileTrails, setProjectileTrails] = useState<ProjectileTrail[]>([])
   const [effects, setEffects] = useState<Effect[]>([])
   const [dying, setDying] = useState<Record<string, number>>({})
   const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1 })
   const [idleAnimation, setIdleAnimation] = useState<number>(0)
+  const [playerFacingAngle, setPlayerFacingAngle] = useState<number>(0) // Track player facing direction
   const [whirlwindState, setWhirlwindState] = useState<{active: boolean, startTime: number, rotation: number}>({
     active: false, 
     startTime: 0, 
@@ -101,10 +124,12 @@ const GameCanvas = React.memo(function GameCanvas() {
     return pos
   }, [positionPool])
 
-  // Memoized transformation functions for better performance
-  const worldToIso = useCallback((worldX: number, worldY: number): Position => {
-    const isoX = (worldX - worldY) * 0.866 // cos(30°)
-    const isoY = (worldX + worldY) * 0.5   // sin(30°)
+  // Enhanced isometric transformation functions for Path of Exile-style view
+  const worldToIso = useCallback((worldX: number, worldY: number, worldZ: number = 0): Position => {
+    // Path of Exile uses a 26.57° (arctan(0.5)) isometric angle
+    // This creates the classic 2:1 pixel ratio isometric view
+    const isoX = (worldX - worldY) * Math.cos(Math.PI / 6) // cos(30°) ≈ 0.866
+    const isoY = (worldX + worldY) * Math.sin(Math.PI / 6) - worldZ * 0.5 // sin(30°) = 0.5, with height
     return getPooledPosition(isoX, isoY)
   }, [getPooledPosition])
 
@@ -115,46 +140,103 @@ const GameCanvas = React.memo(function GameCanvas() {
     )
   }, [camera.x, camera.y, camera.zoom, getPooledPosition])
 
-  const worldToScreen = useCallback((worldX: number, worldY: number): Position => {
-    const iso = worldToIso(worldX, worldY)
+  const worldToScreen = useCallback((worldX: number, worldY: number, worldZ: number = 0): Position => {
+    const iso = worldToIso(worldX, worldY, worldZ)
     return isoToScreen(iso)
   }, [worldToIso, isoToScreen])
 
+  // Helper function to get isometric depth for proper rendering order
+  const getIsometricDepth = useCallback((worldX: number, worldY: number): number => {
+    return worldX + worldY // Objects further down and right should render last
+  }, [])
 
 
-  // Initialize enemy positions
+
+  // Initialize enemy positions - only assign positions to new enemies
   useEffect(() => {
-    const map: Record<string, Position> = {}
-    state.enemies.forEach((e,i) => {
-      map[e.id] = { x: CANVAS_W - 120 - i*28 + (Math.random()-0.5)*30, y: CANVAS_H/2 + (i%5 -2)*36 + (Math.random()-0.5)*20 }
+    setEnemyPositions(prevPositions => {
+      const newPositions = { ...prevPositions }
+      let hasNewEnemies = false
+      
+      // Create spawn zones for new enemies
+      const spawnZones = [
+        { centerX: WORLD_WIDTH * 0.3, centerY: WORLD_HEIGHT * 0.3, radius: 300 },
+        { centerX: WORLD_WIDTH * 0.7, centerY: WORLD_HEIGHT * 0.3, radius: 300 },
+        { centerX: WORLD_WIDTH * 0.3, centerY: WORLD_HEIGHT * 0.7, radius: 300 },
+        { centerX: WORLD_WIDTH * 0.7, centerY: WORLD_HEIGHT * 0.7, radius: 300 },
+        { centerX: WORLD_WIDTH * 0.5, centerY: WORLD_HEIGHT * 0.1, radius: 200 },
+        { centerX: WORLD_WIDTH * 0.5, centerY: WORLD_HEIGHT * 0.9, radius: 200 },
+        { centerX: WORLD_WIDTH * 0.1, centerY: WORLD_HEIGHT * 0.5, radius: 200 },
+        { centerX: WORLD_WIDTH * 0.9, centerY: WORLD_HEIGHT * 0.5, radius: 200 }
+      ]
+      
+      // Only assign positions to enemies that don't have them yet
+      state.enemies.forEach((e, i) => {
+        if (!newPositions[e.id]) {
+          hasNewEnemies = true
+          
+          // Select a spawn zone for this new enemy
+          const zone = spawnZones[i % spawnZones.length]
+          
+          // Generate random position within the selected zone
+          const angle = Math.random() * Math.PI * 2
+          const distance = Math.random() * zone.radius
+          const worldX = zone.centerX + Math.cos(angle) * distance
+          const worldY = zone.centerY + Math.sin(angle) * distance
+          
+          // Ensure enemies stay within world boundaries
+          newPositions[e.id] = { 
+            x: Math.max(50, Math.min(WORLD_WIDTH - 50, worldX)), 
+            y: Math.max(50, Math.min(WORLD_HEIGHT - 50, worldY)) 
+          }
+        }
+      })
+      
+      // Remove positions for enemies that no longer exist
+      const currentEnemyIds = new Set(state.enemies.map(e => e.id))
+      Object.keys(newPositions).forEach(id => {
+        if (!currentEnemyIds.has(id)) {
+          delete newPositions[id]
+        }
+      })
+      
+      // Only update if there are changes
+      if (hasNewEnemies || Object.keys(newPositions).length !== Object.keys(prevPositions).length) {
+        return newPositions
+      }
+      
+      return prevPositions
     })
-    setEnemyPositions(map)
-    // Sync positions with game state for distance checking
-    actions.updateEnemyPositions(map)
-    setProjectiles(p => p.slice(-120))
-  }, [state.enemies.length])
+  }, [state.enemies])
 
-  // Keyboard event handler for debug mode
+  // Sync enemy positions with game state - separate effect to avoid setState during render
   useEffect(() => {
-    const handleKeyPress = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === 'd') {
+    actions.updateEnemyPositions(enemyPositions)
+  }, [enemyPositions, actions])
+
+  // Debug toggle for F1 key
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase()
+      if (key === 'f1') {
         setDebugAOE(prev => !prev)
       }
     }
 
-    window.addEventListener('keydown', handleKeyPress)
+    window.addEventListener('keydown', handleKeyDown)
+    
     return () => {
-      window.removeEventListener('keydown', handleKeyPress)
+      window.removeEventListener('keydown', handleKeyDown)
     }
   }, [])
 
-  const clamp = (p: Position): Position => ({ x: Math.max(30, Math.min(CANVAS_W-30, p.x)), y: Math.max(30, Math.min(CANVAS_H-30, p.y)) })
+  const clamp = (p: Position): Position => ({ x: Math.max(30, Math.min(WORLD_WIDTH-30, p.x)), y: Math.max(30, Math.min(WORLD_HEIGHT-30, p.y)) })
   const clampEffect = (p: Position, radius: number = 50): Position => ({ 
-    x: Math.max(radius, Math.min(CANVAS_W-radius, p.x)), 
-    y: Math.max(radius, Math.min(CANVAS_H-radius, p.y)) 
+    x: Math.max(radius, Math.min(WORLD_WIDTH-radius, p.x)), 
+    y: Math.max(radius, Math.min(WORLD_HEIGHT-radius, p.y)) 
   })
   const isWithinBounds = (p: Position, radius: number = 0): boolean => {
-    return p.x >= radius && p.x <= CANVAS_W - radius && p.y >= radius && p.y <= CANVAS_H - radius
+    return p.x >= radius && p.x <= WORLD_WIDTH - radius && p.y >= radius && p.y <= WORLD_HEIGHT - radius
   }
   const dist = (a: Position, b: Position): number => Math.hypot(a.x-b.x, a.y-b.y)
   const moveTowards = (from: Position, to: Position, s: number): Position => {
@@ -163,317 +245,419 @@ const GameCanvas = React.memo(function GameCanvas() {
   }
 
   // spawn visuals by reading log markers (ANIM_PLAYER|enemyId|type|rarity|crit|damage)
-  const lastLog = useRef('')
+  const lastProcessedLogIndex = useRef(0)
   useEffect(() => {
-    if (!state.log || state.log.length===0) return
-    const latest = state.log[0] // Read from beginning since logs are added with unshift()
-    if (latest === lastLog.current) return
-    lastLog.current = latest
-    if (latest.startsWith('ANIM_PLAYER|')) {
-      const parts = latest.split('|')
-      const id = parts[1], wtype = parts[2], wr = parts[3], critFlag = parts[4], dmg = Math.floor(Number(parts[5] || 0))
-      const pos = enemyPositions[id]; const color = rarityColor(wr)
-      if (wtype === 'melee') {
-        setEffects(s => [...s, { kind:'slash', x: pos?.x||300, y: pos?.y||200, t: Date.now(), ttl: 400, angle: Math.random()*Math.PI - Math.PI/2, color }])
-      } else if (wtype === 'ranged') {
-        if (pos) {
-          const dirx = pos.x - playerPos.x, diry = pos.y - playerPos.y, d = Math.hypot(dirx,diry)||1
-          const speed = 3 * (state.player.projectileSpeed || 1) * (1 + (state.skills['arcane']||0)*0.1)
-          setProjectiles(p => [...p, { x: playerPos.x, y: playerPos.y, vx: dirx/d*speed, vy: diry/d*speed, life: 800, color, radius:3, size:2 }])
-        }
-      } else if (wtype === 'magic') {
-        if (pos) {
-          const dirx = pos.x - playerPos.x, diry = pos.y - playerPos.y, d = Math.hypot(dirx,diry)||1
-          const speed = 2 * (state.player.projectileSpeed || 1) * (1 + (state.skills['arcane']||0)*0.1)
-          setProjectiles(p => [...p, { x: playerPos.x, y: playerPos.y, vx: dirx/d*speed, vy: diry/d*speed, life: 1200, color, radius:6, size:4, glow:true }])
-        }
-      }
-
-      if (pos) {
-        // Format damage to 2 decimal places
-        const formattedDmg = dmg.toFixed(2)
-        const text = (critFlag === 'crit') ? `-${formattedDmg} CRIT!` : `-${formattedDmg}`
-        const isCritical = critFlag === 'crit'
-        
-        setEffects(s => [...s, { 
-          kind: isCritical ? 'critical_damage' : 'damage', 
-          x: pos.x + (Math.random()-0.5)*10, 
-          y: pos.y - 10 + (Math.random()-0.5)*6, 
-          t: Date.now(), 
-          ttl: isCritical ? 2000 : 1600, 
-          text, 
-          crit: isCritical, 
-          size: Math.min(isCritical ? 32 : 28, (isCritical ? 14 : 10) + Math.floor(dmg/2)), 
-          color: isCritical ? '#ff0066' : '#ff6b6b' 
-        }])
-        
-        // Add critical hit burst effect
-        if (isCritical) {
-          setEffects(s => [...s, { 
-            kind: 'critical_burst', 
-            x: pos.x, 
-            y: pos.y, 
-            t: Date.now(), 
-            ttl: 1200, 
-            color: '#ff0066',
-            size: 30
-          }])
-        }
-      }
-    }
-    if (latest.startsWith('Enemy defeated! Loot:')) {
-      const match = latest.match(/Loot: (.+)$/)
-      if (match) setEffects(s => [...s, { kind:'pickup', x: 220, y: 60, t: Date.now(), ttl: 1200, text: match[1], color:'#fff' }])
-    }
+    if (!state.log || state.log.length === 0) return
     
-    // Handle dodge/miss feedback
-    if (latest.includes('dodged')) {
-      if (latest.includes('Player dodged')) {
-        // Player dodged enemy attack - enhanced feedback
-        setEffects(s => [...s, { 
-          kind: 'dodge', 
-          x: playerPos.x + (Math.random()-0.5)*20, 
-          y: playerPos.y - 20 + (Math.random()-0.5)*10, 
-          t: Date.now(), 
-          ttl: 1500, 
-          text: 'DODGE!', 
-          color: '#00ffff',
-          size: 18
-        }])
-        
-        // Add dodge burst effect
-        setEffects(s => [...s, { 
-          kind: 'dodge_burst', 
-          x: playerPos.x, 
-          y: playerPos.y, 
-          t: Date.now(), 
-          ttl: 800, 
-          color: '#00ffff',
-          size: 20
-        }])
-      } else {
-        // Enemy dodged player attack - find which enemy
-        const enemyMatch = latest.match(/(.+) dodged/)
-        if (enemyMatch) {
-          const enemyName = enemyMatch[1]
-          const enemy = state.enemies.find(e => e.name === enemyName)
-          if (enemy) {
-            const pos = enemyPositions[enemy.id]
-            if (pos) {
-              setEffects(s => [...s, { 
-                kind: 'miss', 
-                x: pos.x + (Math.random()-0.5)*20, 
-                y: pos.y - 20 + (Math.random()-0.5)*10, 
-                t: Date.now(), 
-                ttl: 1200, 
-                text: 'MISS!', 
-                color: '#94a3b8',
-                size: 14
-              }])
+    // Process all new logs since the last check
+    const newLogs = state.log.slice(0, state.log.length - lastProcessedLogIndex.current)
+    if (newLogs.length === 0) return
+    
+    lastProcessedLogIndex.current = state.log.length
+    
+    // Process each new log in reverse order (oldest first)
+    newLogs.reverse().forEach(latest => {
+      console.log(`🎬 GameCanvas processing log: ${latest}`)
+      if (latest.startsWith('ANIM_PLAYER|')) {
+        const parts = latest.split('|')
+        const id = parts[1], wtype = parts[2], wr = parts[3], critFlag = parts[4], dmg = Math.floor(Number(parts[5] || 0))
+        const pos = enemyPositions[id]; const color = rarityColor(wr)
+        if (wtype === 'melee') {
+          setEffects(s => [...s, { kind:'slash', x: pos?.x||300, y: pos?.y||200, t: Date.now(), ttl: 400, angle: Math.random()*Math.PI - Math.PI/2, color }])
+        } else if (wtype === 'ranged') {
+          if (pos) {
+            const dirx = pos.x - playerPos.x, diry = pos.y - playerPos.y, d = Math.hypot(dirx,diry)||1
+            const speed = 3 * (state.player.projectileSpeed || 1) * (1 + (state.skills['arcane']||0)*0.1)
+            setProjectiles(p => [...p, { x: playerPos.x, y: playerPos.y, vx: dirx/d*speed, vy: diry/d*speed, life: 800, color, radius:3, size:2 }])
+          }
+        } else if (wtype === 'magic') {
+          if (pos) {
+            const dirx = pos.x - playerPos.x, diry = pos.y - playerPos.y, d = Math.hypot(dirx,diry)||1
+            const speed = 2 * (state.player.projectileSpeed || 1) * (1 + (state.skills['arcane']||0)*0.1)
+            setProjectiles(p => [...p, { x: playerPos.x, y: playerPos.y, vx: dirx/d*speed, vy: diry/d*speed, life: 1200, color, radius:6, size:4, glow:true }])
+          }
+        }
+
+        if (pos) {
+          // Format damage to 2 decimal places
+          const formattedDmg = dmg.toFixed(2)
+          const text = (critFlag === 'crit') ? `-${formattedDmg} CRIT!` : `-${formattedDmg}`
+          const isCritical = critFlag === 'crit'
+          
+          setEffects(s => [...s, { 
+            kind: isCritical ? 'critical_damage' : 'damage', 
+            x: pos.x + (Math.random()-0.5)*10, 
+            y: pos.y - 10 + (Math.random()-0.5)*6, 
+            t: Date.now(), 
+            ttl: isCritical ? 2000 : 1600, 
+            text, 
+            crit: isCritical, 
+            size: Math.min(isCritical ? 32 : 28, (isCritical ? 14 : 10) + Math.floor(dmg/2)), 
+            color: isCritical ? '#ff0066' : '#ff6b6b' 
+          }])
+          
+          // Add critical hit burst effect
+          if (isCritical) {
+            setEffects(s => [...s, { 
+              kind: 'critical_burst', 
+              x: pos.x, 
+              y: pos.y, 
+              t: Date.now(), 
+              ttl: 1200, 
+              color: '#ff0066',
+              size: 30
+            }])
+          }
+        }
+      }
+      if (latest.startsWith('Enemy defeated! Loot:')) {
+        const match = latest.match(/Loot: (.+)$/)
+        if (match) setEffects(s => [...s, { kind:'pickup', x: 220, y: 60, t: Date.now(), ttl: 1200, text: match[1], color:'#fff' }])
+      }
+      
+      // Handle dodge/miss feedback
+      if (latest.includes('dodged')) {
+        if (latest.includes('Player dodged')) {
+          // Player dodged enemy attack - enhanced feedback
+          setEffects(s => [...s, { 
+            kind: 'dodge', 
+            x: playerPos.x + (Math.random()-0.5)*20, 
+            y: playerPos.y - 20 + (Math.random()-0.5)*10, 
+            t: Date.now(), 
+            ttl: 1500, 
+            text: 'DODGE!', 
+            color: '#00ffff',
+            size: 18
+          }])
+          
+          // Add dodge burst effect
+          setEffects(s => [...s, { 
+            kind: 'dodge_burst', 
+            x: playerPos.x, 
+            y: playerPos.y, 
+            t: Date.now(), 
+            ttl: 800, 
+            color: '#00ffff',
+            size: 20
+          }])
+        } else {
+          // Enemy dodged player attack - find which enemy
+          const enemyMatch = latest.match(/(.+) dodged/)
+          if (enemyMatch) {
+            const enemyName = enemyMatch[1]
+            const enemy = state.enemies.find(e => e.name === enemyName)
+            if (enemy) {
+              const pos = enemyPositions[enemy.id]
+              if (pos) {
+                setEffects(s => [...s, { 
+                  kind: 'miss', 
+                  x: pos.x + (Math.random()-0.5)*20, 
+                  y: pos.y - 20 + (Math.random()-0.5)*10, 
+                  t: Date.now(), 
+                  ttl: 1200, 
+                  text: 'MISS!', 
+                  color: '#94a3b8',
+                  size: 14
+                }])
+              }
             }
           }
         }
       }
-    }
-    
-    // Handle enemy damage to player
-    if (latest.includes('hits back for')) {
-      const damageMatch = latest.match(/hits back for (\d+)/)
-      if (damageMatch) {
-        const damage = parseInt(damageMatch[1])
-        setEffects(s => [...s, { 
-          kind: 'player_damage', 
-          x: playerPos.x + (Math.random()-0.5)*15, 
-          y: playerPos.y - 15 + (Math.random()-0.5)*8, 
-          t: Date.now(), 
-          ttl: 1400, 
-          text: `-${damage}`, 
-          color: '#ef4444',
-          size: Math.min(24, 12 + Math.floor(damage/3))
-        }])
-      }
-    }
-    
-    // Handle blocked attacks
-    if (latest.includes('blocked')) {
-      if (latest.includes('Player blocked')) {
-        setEffects(s => [...s, { 
-          kind: 'block', 
-          x: playerPos.x + (Math.random()-0.5)*20, 
-          y: playerPos.y - 20 + (Math.random()-0.5)*10, 
-          t: Date.now(), 
-          ttl: 1200, 
-          text: 'BLOCK!', 
-          color: '#fbbf24',
-          size: 16
-        }])
-      }
-    }
-    
-    if (latest.startsWith('🔥 Critical Hit!')) {
-      // Add critical hit effect if needed
-    }
-    if (latest.startsWith('ANIM_SKILL|')) {
-      const parts = latest.split('|')
-      const skillType = parts[1]
       
-      if (skillType === 'whirlwind') {
-        const startTime = Number(parts[2])
-        const duration = Number(parts[3])
-        
-        // Activate Whirlwind spinning state
-        setWhirlwindState({
-          active: true,
-          startTime: Date.now(),
-          rotation: 0
-        })
-        
-        // Set timer to deactivate Whirlwind after duration
-        setTimeout(() => {
-          setWhirlwindState(prev => ({ ...prev, active: false }))
-        }, duration)
-        
-        setEffects(s => [...s, { 
-          kind: 'whirlwind', 
-          x: playerPos.x, 
-          y: playerPos.y, 
-          t: startTime, 
-          ttl: duration, 
-          color: '#fbbf24',
-          duration: duration
-        }])
-      } else if (skillType === 'heal') {
-        setEffects(s => [...s, { 
-          kind: 'heal', 
-          x: playerPos.x, 
-          y: playerPos.y, 
-          t: Date.now(), 
-          ttl: 2000, 
-          color: '#10b981'
-        }])
-      } else if (skillType === 'fireball') {
-        setEffects(s => [...s, { 
-          kind: 'explosion', 
-          x: playerPos.x, 
-          y: playerPos.y, 
-          t: Date.now(), 
-          ttl: 800,
-          color: '#ff4400',
-          size: 20
-        }])
-      } else if (skillType === 'lightning_bolt') {
-        setEffects(s => [...s, { 
-          kind: 'lightning', 
-          x: playerPos.x, 
-          y: playerPos.y, 
-          t: Date.now(), 
-          ttl: 600,
-          color: '#00aaff',
-          size: 15
-        }])
-      } else if (skillType === 'power_strike') {
-        setEffects(s => [...s, { 
-          kind: 'power_strike', 
-          x: playerPos.x, 
-          y: playerPos.y, 
-          t: Date.now(), 
-          ttl: 700,
-          color: '#ffaa00',
-          size: 18
-        }])
-      } else if (skillType === 'ice_shard') {
-        setEffects(s => [...s, { 
-          kind: 'ice_shard', 
-          x: playerPos.x, 
-          y: playerPos.y, 
-          t: Date.now(), 
-          ttl: 1000,
-          color: '#74c0fc',
-          size: 12
-        }])
-      } else if (skillType === 'ground_slam') {
-        setEffects(s => [...s, { 
-          kind: 'ground_slam', 
-          x: playerPos.x, 
-          y: playerPos.y, 
-          t: Date.now(), 
-          ttl: 800,
-          color: '#8b5a2b',
-          size: 25
-        }])
-      } else if (skillType === 'poison_arrow') {
-        setEffects(s => [...s, { 
-          kind: 'poison_arrow', 
-          x: playerPos.x, 
-          y: playerPos.y, 
-          t: Date.now(), 
-          ttl: 3000,
-          color: '#51cf66',
-          size: 20
-        }])
-      } else if (skillType === 'chain_lightning') {
-        setEffects(s => [...s, { 
-          kind: 'chain_lightning', 
-          x: playerPos.x, 
-          y: playerPos.y, 
-          t: Date.now(), 
-          ttl: 800,
-          color: '#ffd43b',
-          size: 16
-        }])
-      } else if (skillType === 'meteor') {
-        setEffects(s => [...s, { 
-          kind: 'meteor', 
-          x: playerPos.x, 
-          y: playerPos.y, 
-          t: Date.now(), 
-          ttl: 1200,
-          color: '#ff6b6b',
-          size: 35
-        }])
-      } else if (skillType === 'blade_vortex') {
-        setEffects(s => [...s, { 
-          kind: 'blade_vortex', 
-          x: playerPos.x, 
-          y: playerPos.y, 
-          t: Date.now(), 
-          ttl: 5000,
-          color: '#c0c0c0',
-          size: 22
-        }])
-      } else if (skillType === 'frost_nova') {
-        setEffects(s => [...s, { 
-          kind: 'frost_nova', 
-          x: playerPos.x, 
-          y: playerPos.y, 
-          t: Date.now(), 
-          ttl: 1000,
-          color: '#74c0fc',
-          size: 28
-        }])
-      } else if (skillType === 'cleave') {
-        setEffects(s => [...s, { 
-          kind: 'cleave', 
-          x: playerPos.x, 
-          y: playerPos.y, 
-          t: Date.now(), 
-          ttl: 600,
-          color: '#fbbf24',
-          size: 20
-        }])
-      } else if (skillType === 'summon_skeletons') {
-        setEffects(s => [...s, { 
-          kind: 'summon_skeletons', 
-          x: playerPos.x, 
-          y: playerPos.y, 
-          t: Date.now(), 
-          ttl: 2000,
-          color: '#9ca3af',
-          size: 15
-        }])
+      // Handle enemy damage to player
+      if (latest.includes('hits back for')) {
+        const damageMatch = latest.match(/hits back for (\d+)/)
+        if (damageMatch) {
+          const damage = parseInt(damageMatch[1])
+          setEffects(s => [...s, { 
+            kind: 'player_damage', 
+            x: playerPos.x + (Math.random()-0.5)*15, 
+            y: playerPos.y - 15 + (Math.random()-0.5)*8, 
+            t: Date.now(), 
+            ttl: 1400, 
+            text: `-${damage}`, 
+            color: '#ef4444',
+            size: Math.min(24, 12 + Math.floor(damage/3))
+          }])
+        }
       }
-    }
-  }, [state.log, enemyPositions, playerPos])
+      
+      // Handle blocked attacks
+      if (latest.includes('blocked')) {
+        if (latest.includes('Player blocked')) {
+          setEffects(s => [...s, { 
+            kind: 'block', 
+            x: playerPos.x + (Math.random()-0.5)*20, 
+            y: playerPos.y - 20 + (Math.random()-0.5)*10, 
+            t: Date.now(), 
+            ttl: 1200, 
+            text: 'BLOCK!', 
+            color: '#fbbf24',
+            size: 16
+          }])
+        }
+      }
+      
+      if (latest.startsWith('🔥 Critical Hit!')) {
+        // Add critical hit effect if needed
+      }
+      if (latest.startsWith('ANIM_SKILL|')) {
+        const parts = latest.split('|')
+        const skillType = parts[1]
+        console.log(`🎯 Processing ANIM_SKILL: ${skillType}, parts:`, parts)
+        
+        if (skillType === 'whirlwind') {
+          const startTime = Number(parts[2])
+          const duration = Number(parts[3])
+          
+          // Activate Whirlwind spinning state
+          setWhirlwindState({
+            active: true,
+            startTime: Date.now(),
+            rotation: 0
+          })
+          
+          // Set timer to deactivate Whirlwind after duration
+          setTimeout(() => {
+            setWhirlwindState(prev => ({ ...prev, active: false }))
+          }, duration)
+          
+          setEffects(s => [...s, { 
+            kind: 'whirlwind', 
+            x: playerPos.x, 
+            y: playerPos.y, 
+            t: startTime, 
+            ttl: duration, 
+            color: '#fbbf24',
+            duration: duration
+          }])
+        } else if (skillType === 'heal') {
+          setEffects(s => [...s, { 
+            kind: 'heal', 
+            x: playerPos.x, 
+            y: playerPos.y, 
+            t: Date.now(), 
+            ttl: 2000, 
+            color: '#10b981'
+          }])
+        } else if (skillType === 'fireball') {
+          const targetId = parts[2]
+          const targetPos = enemyPositions[targetId]
+          console.log(`🔥 FIREBALL ANIM_SKILL received - targetId: ${targetId}, targetPos:`, targetPos)
+          if (targetPos) {
+            // Create enhanced fireball projectile with advanced visual effects
+            const dirx = targetPos.x - playerPos.x, diry = targetPos.y - playerPos.y, d = Math.hypot(dirx,diry)||1
+            const speed = 4 * (state.player.projectileSpeed || 1)
+            
+            // Check for multiple projectiles support gem
+            const fireballSkill = state.player.skillBar.slots.find((s: any) => s?.name === 'Fireball')
+            const projectileCount = fireballSkill ? fireballSkill.supportGems.reduce((count: number, gem: any) => {
+              if (gem.id === 'multiple_projectiles') {
+                return count + (gem.modifiers?.find((m: any) => m.type === 'projectiles')?.value || 0)
+              }
+              return count
+            }, 1) : 1
+            
+            // Calculate spawn position in front of player
+            const spawnDistance = 20 // Distance in front of player
+            const baseAngle = Math.atan2(diry, dirx)
+            const spawnX = playerPos.x + Math.cos(baseAngle) * spawnDistance
+            const spawnY = playerPos.y + Math.sin(baseAngle) * spawnDistance
+            
+            // Create multiple projectiles if support gem is equipped
+            for (let i = 0; i < projectileCount; i++) {
+              const angleOffset = projectileCount > 1 ? (i - (projectileCount - 1) / 2) * 0.3 : 0
+              const angle = baseAngle + angleOffset
+              const projVx = Math.cos(angle) * speed
+              const projVy = Math.sin(angle) * speed
+              
+              // Offset spawn position for multiple projectiles
+              const offsetDistance = projectileCount > 1 ? (i - (projectileCount - 1) / 2) * 8 : 0
+              const offsetX = spawnX + Math.cos(angle + Math.PI/2) * offsetDistance
+              const offsetY = spawnY + Math.sin(angle + Math.PI/2) * offsetDistance
+              
+              const newProjectile = { 
+                x: offsetX, 
+                y: offsetY, 
+                vx: projVx, 
+                vy: projVy, 
+                life: 5000, // Extended life for 1000px range travel
+                color: '#ff4400', 
+                radius: 10, 
+                size: 8, 
+                glow: true,
+                type: 'fireball',
+                trail: false,
+                particles: false,
+                rotation: 0,
+                targetId: targetId
+              }
+              // Add to both state and animation ref to avoid race conditions
+              setProjectiles(p => [...p, newProjectile])
+              
+              // Also add directly to animation state ref for immediate processing
+              if (!animationStateRef.current.calculatedProjectiles) {
+                animationStateRef.current.calculatedProjectiles = []
+              }
+              animationStateRef.current.calculatedProjectiles.push(newProjectile)
+            }
+          }
+         } else if (skillType === 'lightning_bolt') {
+           const targetId = parts[2]
+           const targetPos = enemyPositions[targetId]
+           if (targetPos) {
+             // Create traveling lightning bolt projectile
+             const dirx = targetPos.x - playerPos.x, diry = targetPos.y - playerPos.y, d = Math.hypot(dirx,diry)||1
+             const speed = 6 * (state.player.projectileSpeed || 1)
+             
+             // Calculate spawn position in front of player
+             const spawnDistance = 20
+             const angle = Math.atan2(diry, dirx)
+             const spawnX = playerPos.x + Math.cos(angle) * spawnDistance
+             const spawnY = playerPos.y + Math.sin(angle) * spawnDistance
+             
+             setProjectiles(p => [...p, { 
+               x: spawnX, 
+               y: spawnY, 
+               vx: dirx/d*speed, 
+               vy: diry/d*speed, 
+               life: 800, 
+               color: '#00aaff', 
+               radius: 6, 
+               size: 4, 
+               glow: true 
+             }])
+           }
+         } else if (skillType === 'power_strike') {
+           setEffects(s => [...s, { 
+             kind: 'power_strike', 
+             x: playerPos.x, 
+             y: playerPos.y, 
+             t: Date.now(), 
+             ttl: 700,
+             color: '#ffaa00',
+             size: 18
+           }])
+         } else if (skillType === 'ice_shard') {
+           const targetId = parts[2]
+           const targetPos = enemyPositions[targetId]
+           if (targetPos) {
+             // Create traveling ice shard projectile
+             const dirx = targetPos.x - playerPos.x, diry = targetPos.y - playerPos.y, d = Math.hypot(dirx,diry)||1
+             const speed = 5 * (state.player.projectileSpeed || 1)
+             
+             // Calculate spawn position in front of player
+             const spawnDistance = 20
+             const angle = Math.atan2(diry, dirx)
+             const spawnX = playerPos.x + Math.cos(angle) * spawnDistance
+             const spawnY = playerPos.y + Math.sin(angle) * spawnDistance
+             
+             setProjectiles(p => [...p, { 
+               x: spawnX, 
+               y: spawnY, 
+               vx: dirx/d*speed, 
+                vy: diry/d*speed, 
+                life: 900, 
+                color: '#74c0fc', 
+                radius: 5, 
+                size: 3, 
+                glow: true 
+              }])
+            }
+          } else if (skillType === 'ground_slam') {
+            setEffects(s => [...s, { 
+              kind: 'ground_slam', 
+              x: playerPos.x, 
+              y: playerPos.y, 
+              t: Date.now(), 
+              ttl: 800,
+              color: '#8b5a2b',
+              size: 25
+            }])
+          } else if (skillType === 'poison_arrow') {
+            const targetId = parts[2]
+            const targetPos = enemyPositions[targetId]
+            if (targetPos) {
+              // Create traveling poison arrow projectile
+              const dirx = targetPos.x - playerPos.x, diry = targetPos.y - playerPos.y, d = Math.hypot(dirx,diry)||1
+              const speed = 4.5 * (state.player.projectileSpeed || 1)
+              setProjectiles(p => [...p, { 
+                x: playerPos.x, 
+                y: playerPos.y, 
+                vx: dirx/d*speed, 
+                vy: diry/d*speed, 
+                life: 1200, 
+                color: '#51cf66', 
+                radius: 4, 
+                size: 3, 
+                glow: false 
+              }])
+            }
+          } else if (skillType === 'chain_lightning') {
+            setEffects(s => [...s, { 
+              kind: 'chain_lightning', 
+              x: playerPos.x, 
+              y: playerPos.y, 
+              t: Date.now(), 
+              ttl: 800,
+              color: '#ffd43b',
+              size: 16
+            }])
+          } else if (skillType === 'meteor') {
+            setEffects(s => [...s, { 
+              kind: 'meteor', 
+               x: playerPos.x, 
+               y: playerPos.y, 
+               t: Date.now(), 
+               ttl: 1200,
+               color: '#ff6b6b',
+               size: 35
+             }])
+           } else if (skillType === 'blade_vortex') {
+             setEffects(s => [...s, { 
+               kind: 'blade_vortex', 
+               x: playerPos.x, 
+               y: playerPos.y, 
+               t: Date.now(), 
+               ttl: 5000,
+               color: '#c0c0c0',
+               size: 22
+             }])
+           } else if (skillType === 'frost_nova') {
+             setEffects(s => [...s, { 
+               kind: 'frost_nova', 
+               x: playerPos.x, 
+               y: playerPos.y, 
+               t: Date.now(), 
+               ttl: 1000,
+               color: '#74c0fc',
+               size: 28
+             }])
+           } else if (skillType === 'cleave') {
+             setEffects(s => [...s, { 
+               kind: 'cleave', 
+               x: playerPos.x, 
+               y: playerPos.y, 
+               t: Date.now(), 
+               ttl: 600,
+               color: '#fbbf24',
+               size: 20
+             }])
+           } else if (skillType === 'summon_skeletons') {
+             setEffects(s => [...s, { 
+               kind: 'summon_skeletons', 
+               x: playerPos.x, 
+               y: playerPos.y, 
+               t: Date.now(), 
+               ttl: 2000,
+               color: '#9ca3af',
+               size: 15
+             }])
+           }
+         }
+       })
+     }, [state.log, enemyPositions, playerPos])
 
   // Collision detection function
   const checkCollision = (pos1: Position, pos2: Position, radius1: number, radius2: number): boolean => {
@@ -519,100 +703,235 @@ const GameCanvas = React.memo(function GameCanvas() {
       let newEffects = effects
       let newDying = dying
       let newCamera = camera
+      
 
-      // Move player towards nearest enemy or idle movement
+
+      // Smart AI movement system with ranged combat support
+      const moveSpeed = whirlwindState.active ? 3.5 : 2.2 // Faster movement during Whirlwind
+      
       if (state.enemies.length > 0) {
+        // Find nearest enemy
         let nearestEnemy: any = null
         let nearestPos: Position | null = null
-        let nd = 9999
+        let nearestDistance = 9999
+        
         state.enemies.forEach(e => {
-          const p = enemyPositions[e.id]
-          if (!p) return;
-          const d=dist(playerPos,p);
-          if (d<nd){nd=d; nearestEnemy=e; nearestPos=p}
-        })
-        if (nearestEnemy && nearestPos) {
-          const attackRange = ((state.player.equipped as any)?.type === 'ranged' ? 180 : 48)
+          const enemyPos = enemyPositions[e.id]
+          if (!enemyPos || e.hp <= 0) return
           
-          // Whirlwind movement - move towards enemies in a spinning pattern
-          if (whirlwindState.active) {
-            const whirlwindSpeed = 2.5 // Faster movement during Whirlwind
-            const spiralRadius = 15 // Small spiral movement
-            const spiralOffset = {
-              x: Math.cos(animationStateRef.current.whirlwindRotation * 3) * spiralRadius,
-              y: Math.sin(animationStateRef.current.whirlwindRotation * 3) * spiralRadius
+          const distance = dist(playerPos, enemyPos)
+          if (distance < nearestDistance) {
+            nearestDistance = distance
+            nearestEnemy = e
+            nearestPos = enemyPos
+          }
+        })
+        
+        if (nearestEnemy && nearestPos) {
+          // Analyze equipped skills to determine combat strategy
+          const equippedSkills = state.player.skillBar.slots.filter((s: any) => s && s.isEquipped)
+          let hasRangedSkills = false
+          let maxRange = 0
+          let optimalRange = 80 // Default melee range
+          
+          equippedSkills.forEach((skill: any) => {
+            if (skill && skill.scaling) {
+              // Check for projectile skills
+              const projectileSkills = ['fireball', 'lightning_bolt', 'ice_shard', 'poison_arrow']
+              if (projectileSkills.includes(skill.id)) {
+                hasRangedSkills = true
+                const skillRange = getScaledRange(skill)
+                maxRange = Math.max(maxRange, skillRange)
+                
+                // Set optimal range to 70% of max range for better engagement (AUTO_SKILLS uses 120% buffer)
+                optimalRange = Math.max(optimalRange, skillRange * 0.7)
+              }
             }
+          })
+          
+          // Calculate direction to nearest enemy for facing angle
+          const dx = (nearestPos as Position).x - playerPos.x
+          const dy = (nearestPos as Position).y - playerPos.y
+          const distance = nearestDistance
+          
+          let targetPos = { ...playerPos }
+          let shouldMove = false
+          
+          if (hasRangedSkills) {
+            // Advanced ranged combat system with multi-enemy awareness
+            const minRange = optimalRange * 0.8  // Increased from 0.7 for more stable positioning
+            const maxRange = optimalRange * 1.15 // Reduced from 1.2 to prevent oscillation
+            const dangerZone = 80 // Distance considered too close for safety (reduced for better engagement)
             
-            const targetPos = {
-              x: (nearestPos as Position).x + spiralOffset.x,
-              y: (nearestPos as Position).y + spiralOffset.y
-            }
-            
-            const calculatedPos = clamp(moveTowards(playerPos, targetPos, whirlwindSpeed))
-            
-            // Enhanced collision detection with proper radii
-            let canMove = true
-            state.enemies.forEach(e => {
+            // Find all nearby enemies within danger zone
+            const nearbyEnemies = state.enemies.filter(e => {
               const enemyPos = enemyPositions[e.id]
-              if (enemyPos) {
-                // Calculate enemy radius based on type and level
-                let enemyRadius = 12
-                if (e.type === 'melee') {
-                  enemyRadius = 12 + e.level * 0.8
-                } else if (e.type === 'ranged') {
-                  enemyRadius = 10 + e.level * 0.6
-                } else {
-                  enemyRadius = 14 + e.level * 1.0
+              if (!enemyPos || e.hp <= 0) return false
+              return dist(playerPos, enemyPos) < dangerZone
+            }).map(e => ({
+              enemy: e,
+              pos: enemyPositions[e.id],
+              distance: dist(playerPos, enemyPositions[e.id])
+            }))
+            
+            // Calculate threat vector (average direction of all nearby enemies)
+            let threatX = 0, threatY = 0
+            nearbyEnemies.forEach(({ pos, distance }) => {
+              const weight = 1 / Math.max(distance, 1) // Closer enemies have more weight
+              const dx = pos.x - playerPos.x
+              const dy = pos.y - playerPos.y
+              threatX += dx * weight
+              threatY += dy * weight
+            })
+            
+            // Primary target positioning (nearest enemy) - use already calculated values
+            
+            if (nearbyEnemies.length > 1) {
+              // Surrounded - prioritize evasion with intelligent pathfinding
+              const threatMagnitude = Math.sqrt(threatX * threatX + threatY * threatY)
+              if (threatMagnitude > 0) {
+                // Primary escape direction (away from center of threat)
+                const escapeX = -threatX / threatMagnitude
+                const escapeY = -threatY / threatMagnitude
+                const escapeDistance = moveSpeed * 1.0 // Reduced from 1.5 for less aggressive evasion
+                
+                // Try primary escape route
+                let bestEscape = {
+                  x: playerPos.x + escapeX * escapeDistance,
+                  y: playerPos.y + escapeY * escapeDistance
                 }
                 
-                // Player radius is 16, add small buffer for smooth movement
-                if (checkCollision(calculatedPos, enemyPos, 18, enemyRadius + 2)) {
-                  canMove = false
-                }
-              }
-            })
-            if (canMove) {
-              newPlayerPos = calculatedPos
-            }
-          } else if (nd > attackRange) {
-            const calculatedPos = clamp(moveTowards(playerPos, nearestPos, 1.1))
-            // Enhanced collision detection with proper radii
-            let canMove = true
-            state.enemies.forEach(e => {
-              const enemyPos = enemyPositions[e.id]
-              if (enemyPos) {
-                // Calculate enemy radius based on type and level
-                let enemyRadius = 12
-                if (e.type === 'melee') {
-                  enemyRadius = 12 + e.level * 0.8
-                } else if (e.type === 'ranged') {
-                  enemyRadius = 10 + e.level * 0.6
-                } else {
-                  enemyRadius = 14 + e.level * 1.0
+                // If primary escape is blocked by boundaries, try alternative directions
+                if (!isWithinBounds(bestEscape, 18)) {
+                  const alternativeDirections = [
+                    { x: escapeY, y: -escapeX }, // Perpendicular left
+                    { x: -escapeY, y: escapeX }, // Perpendicular right
+                    { x: escapeX * 0.7 + escapeY * 0.7, y: escapeY * 0.7 - escapeX * 0.7 }, // Diagonal left
+                    { x: escapeX * 0.7 - escapeY * 0.7, y: escapeY * 0.7 + escapeX * 0.7 }  // Diagonal right
+                  ]
+                  
+                  for (const dir of alternativeDirections) {
+                    const altEscape = {
+                      x: playerPos.x + dir.x * escapeDistance,
+                      y: playerPos.y + dir.y * escapeDistance
+                    }
+                    if (isWithinBounds(altEscape, 18)) {
+                      bestEscape = altEscape
+                      break
+                    }
+                  }
+                  
+                  // If all directions are blocked, try moving towards the center of the map
+                  if (!isWithinBounds(bestEscape, 18)) {
+                    const centerX = WORLD_WIDTH / 2
+                    const centerY = WORLD_HEIGHT / 2
+                    const toCenterX = centerX - playerPos.x
+                    const toCenterY = centerY - playerPos.y
+                    const toCenterMag = Math.sqrt(toCenterX * toCenterX + toCenterY * toCenterY)
+                    if (toCenterMag > 0) {
+                      bestEscape = {
+                        x: playerPos.x + (toCenterX / toCenterMag) * escapeDistance,
+                        y: playerPos.y + (toCenterY / toCenterMag) * escapeDistance
+                      }
+                    }
+                  }
                 }
                 
-                // Player radius is 16, add small buffer for smooth movement
-                if (checkCollision(calculatedPos, enemyPos, 18, enemyRadius + 2)) {
-                  canMove = false
-                }
+                targetPos = bestEscape
+                shouldMove = true
               }
-            })
-            if (canMove) {
-              newPlayerPos = calculatedPos
+            } else if (distance < minRange) {
+              // Too close to primary target - retreat
+              const retreatDistance = Math.min(minRange - distance + 20, moveSpeed * 1.0) // Reduced from 1.2
+              const dirX = dx / Math.max(distance, 1)
+              const dirY = dy / Math.max(distance, 1)
+              targetPos = {
+                x: playerPos.x - dirX * retreatDistance,
+                y: playerPos.y - dirY * retreatDistance
+              }
+              shouldMove = true
+            } else if (distance > maxRange) {
+              // Too far - move closer to optimal range
+              const approachDistance = Math.min(distance - optimalRange, moveSpeed)
+              const dirX = dx / Math.max(distance, 1)
+              const dirY = dy / Math.max(distance, 1)
+              targetPos = {
+                x: playerPos.x + dirX * approachDistance,
+                y: playerPos.y + dirY * approachDistance
+              }
+              shouldMove = true
             }
           } else {
-            // Combat stance - slight movement while in range
-            newPlayerPos = { 
-              x: playerPos.x + Math.sin(now/300)*0.2, 
-              y: playerPos.y + Math.cos(now/300)*0.2 
+            // Melee combat strategy - move close with deadzone
+            if (distance > 60) {
+              const moveDistance = Math.min(distance - 50, moveSpeed)
+              const dirX = dx / Math.max(distance, 1)
+              const dirY = dy / Math.max(distance, 1)
+              targetPos = {
+                x: playerPos.x + dirX * moveDistance,
+                y: playerPos.y + dirY * moveDistance
+              }
+              shouldMove = true
             }
           }
+          
+          if (shouldMove) {
+            // Enhanced collision detection with emergency escape for ranged combat
+            let canMove = true
+            let isEmergencyEscape = false
+            
+            // Check if this is an emergency escape (surrounded by multiple enemies)
+            if (hasRangedSkills) {
+              const nearbyCount = state.enemies.filter(e => {
+                const enemyPos = enemyPositions[e.id]
+                return enemyPos && e.hp > 0 && dist(playerPos, enemyPos) < 60 // Reduced from 120
+              }).length
+              isEmergencyEscape = nearbyCount > 1
+            }
+            
+            // For emergency escapes, use more lenient collision detection
+            const collisionBuffer = isEmergencyEscape ? 8 : 18
+            const enemyBuffer = isEmergencyEscape ? 0 : 2
+            
+            state.enemies.forEach(e => {
+              const enemyPos = enemyPositions[e.id]
+              if (enemyPos && e.hp > 0) {
+                // Calculate enemy radius based on type and level
+                let enemyRadius = 12
+                if (e.type === 'melee') {
+                  enemyRadius = 12 + e.level * 0.8
+                } else if (e.type === 'ranged') {
+                  enemyRadius = 10 + e.level * 0.6
+                } else {
+                  enemyRadius = 14 + e.level * 1.0
+                }
+                
+                // Check collision with adjusted buffers
+                if (checkCollision(targetPos, enemyPos, collisionBuffer, enemyRadius + enemyBuffer)) {
+                  canMove = false
+                }
+              }
+            })
+            
+            if (canMove && isWithinBounds(targetPos, 18)) {
+              newPlayerPos = targetPos
+            } else if (isEmergencyEscape && isWithinBounds(targetPos, 18)) {
+              // Force movement for emergency escape even with minor collisions
+              newPlayerPos = targetPos
+            }
+          }
+          
+          // Always face the nearest enemy
+          const newFacingAngle = Math.atan2(dy, dx)
+          setPlayerFacingAngle(newFacingAngle)
+          
+          // Removed idle animation during combat to prevent convulsing
         }
       } else {
-        // Idle movement animation when no enemies
+        // No enemies, idle movement animation
         newPlayerPos = {
-          x: playerPos.x + Math.sin(now / 2000) * 0.5,
-          y: playerPos.y + Math.cos(now / 3000) * 0.3
+          x: playerPos.x + Math.sin(now / 2000) * 0.3,
+          y: playerPos.y + Math.cos(now / 3000) * 0.2
         }
       }
 
@@ -650,45 +969,87 @@ const GameCanvas = React.memo(function GameCanvas() {
           currentEnemyRadius = 14 + e.level * 1.0
         }
         
-        // Check collision with player (player radius 16)
-        if (!checkCollision(calculatedPos, newPlayerPos, currentEnemyRadius + 2, 18)) {
-          // Check collision with other enemies
-          let canMove = true
-          state.enemies.forEach(otherE => {
-            if (otherE.id !== e.id) {
-              const otherPos = nextEnemyPositions[otherE.id]
-              if (otherPos) {
-                // Calculate other enemy radius
-                let otherEnemyRadius = 12
-                if (otherE.type === 'melee') {
-                  otherEnemyRadius = 12 + otherE.level * 0.8
-                } else if (otherE.type === 'ranged') {
-                  otherEnemyRadius = 10 + otherE.level * 0.6
-                } else {
-                  otherEnemyRadius = 14 + otherE.level * 1.0
-                }
-                
-                if (checkCollision(calculatedPos, otherPos, currentEnemyRadius + 1, otherEnemyRadius + 1)) {
-                  canMove = false
-                }
+        // Check collision with other enemies first
+        let canMove = true
+        state.enemies.forEach(otherE => {
+          if (otherE.id !== e.id) {
+            const otherPos = nextEnemyPositions[otherE.id]
+            if (otherPos) {
+              // Calculate other enemy radius
+              let otherEnemyRadius = 12
+              if (otherE.type === 'melee') {
+                otherEnemyRadius = 12 + otherE.level * 0.8
+              } else if (otherE.type === 'ranged') {
+                otherEnemyRadius = 10 + otherE.level * 0.6
+              } else {
+                otherEnemyRadius = 14 + otherE.level * 1.0
+              }
+              
+              if (checkCollision(calculatedPos, otherPos, currentEnemyRadius + 1, otherEnemyRadius + 1)) {
+                canMove = false
               }
             }
-          })
-          if (canMove) {
-            nextEnemyPositions[e.id] = calculatedPos
           }
+        })
+        
+        // Allow movement unless colliding with other enemies
+        // Enemies should be able to get close to the player for combat
+        if (canMove) {
+          nextEnemyPositions[e.id] = calculatedPos
         }
       })
       newEnemyPositions = nextEnemyPositions
       newDying = nextDying
 
       // Update projectiles and check for impacts
-      const updatedProjectiles = projectiles.map(p => ({ ...p, x: p.x + p.vx, y: p.y + p.vy, life: p.life - dt }))
+      const updatedProjectiles = projectiles.map(p => {
+        let newVx = p.vx
+        let newVy = p.vy
+        
+        // Enhanced target tracking for fireballs
+        if (p.type === 'fireball' && p.targetId) {
+          const targetPos = newEnemyPositions[p.targetId]
+          if (targetPos) {
+            // Calculate direction to target
+            const dx = targetPos.x - p.x
+            const dy = targetPos.y - p.y
+            const distance = Math.hypot(dx, dy)
+            
+            if (distance > 0) {
+              // Gentle homing behavior - adjust velocity slightly toward target
+              const homingStrength = 0.15 // How strongly it homes in
+              const targetVx = (dx / distance) * Math.hypot(p.vx, p.vy)
+              const targetVy = (dy / distance) * Math.hypot(p.vx, p.vy)
+              
+              newVx = p.vx + (targetVx - p.vx) * homingStrength
+              newVy = p.vy + (targetVy - p.vy) * homingStrength
+            }
+          }
+        }
+        
+        const newP = { 
+          ...p, 
+          x: p.x + newVx, 
+          y: p.y + newVy,
+          vx: newVx,
+          vy: newVy,
+          life: p.life - dt,
+          rotation: p.rotation !== undefined ? p.rotation + 0.3 : undefined
+        }
+        
+        // Trail logic removed - using simple fireball visuals
+        
+        return newP
+      })
       const nextEffects = [...effects]
+      
+
       
       // Check for projectile-enemy collisions
       const remainingProjectiles = updatedProjectiles.filter(p => {
-        if (p.life <= 0) return false
+        if (p.life <= 0) {
+          return false
+        }
         
         // Check collision with enemies
         let hit = false
@@ -705,16 +1066,46 @@ const GameCanvas = React.memo(function GameCanvas() {
             }
             
             if (checkCollision({x: p.x, y: p.y}, enemyPos, p.radius, enemyRadius)) {
-              // Create impact effect
-              nextEffects.push({ 
-                kind: 'impact', 
-                x: p.x, 
-                y: p.y, 
-                t: Date.now(), 
-                ttl: 300, 
-                color: p.color,
-                size: p.size * 2
-              })
+              // Create enhanced impact effect based on projectile type
+              if (p.type === 'fireball') {
+                // Fireball explosion effect
+                nextEffects.push({ 
+                  kind: 'fireball_explosion', 
+                  x: p.x, 
+                  y: p.y, 
+                  t: Date.now(), 
+                  ttl: 800, 
+                  color: p.color,
+                  size: p.size * 3
+                })
+                
+                // Add fire particles
+                for (let i = 0; i < 8; i++) {
+                  const angle = (i / 8) * Math.PI * 2
+                  const distance = 20 + Math.random() * 30
+                  nextEffects.push({
+                    kind: 'fire_particle',
+                    x: p.x + Math.cos(angle) * distance,
+                    y: p.y + Math.sin(angle) * distance,
+                    t: Date.now(),
+                    ttl: 400 + Math.random() * 200,
+                    color: '#ff6600',
+                    size: 3 + Math.random() * 3
+                  })
+                }
+              } else {
+                // Standard impact effect
+                nextEffects.push({ 
+                  kind: 'impact', 
+                  x: p.x, 
+                  y: p.y, 
+                  t: Date.now(), 
+                  ttl: 300, 
+                  color: p.color,
+                  size: p.size * 2
+                })
+              }
+              
               hit = true
             }
           }
@@ -723,8 +1114,10 @@ const GameCanvas = React.memo(function GameCanvas() {
         return !hit
       })
       
-      newProjectiles = remainingProjectiles
+      newProjectiles = remainingProjectiles.slice(-200) // Limit projectiles to prevent memory issues
       newEffects = nextEffects.filter(e => (Date.now() - e.t) < e.ttl)
+      
+
 
       // Store calculated values in animation state ref
       animationStateRef.current.calculatedPlayerPos = newPlayerPos
@@ -786,7 +1179,7 @@ const GameCanvas = React.memo(function GameCanvas() {
     
     // Optimize canvas clearing and background drawing
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#071024';
+    ctx.fillStyle = '#2a3441';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.strokeStyle = '#334155';
     ctx.lineWidth = 2;
@@ -794,7 +1187,7 @@ const GameCanvas = React.memo(function GameCanvas() {
 
     // draw enemies
     state.enemies.forEach((e, i) => {
-      const worldPos = enemyPositions[e.id] || { x: CANVAS_W - 120 - i * 28, y: CANVAS_H / 2 + i * 36 };
+      const worldPos = enemyPositions[e.id] || { x: 200 + i * 40, y: 100 + (i % 5 - 2) * 50 };
       const screenPos = worldToScreen(worldPos.x, worldPos.y);
       const dyingStart = dying[e.id];
       const alpha = e.hp <= 0 && dyingStart ? Math.max(0, 1 - ((Date.now() - dyingStart) / 1500)) : 1;
@@ -873,15 +1266,175 @@ const GameCanvas = React.memo(function GameCanvas() {
       ctx.shadowBlur = 8 * camera.zoom;
     }
     
-    ctx.fillStyle = whirlwindState.active ? '#ffffff' : '#000000'; // White during Whirlwind
-    ctx.fillRect(
-      playerScreenPos.x - playerSize/2, 
-      playerScreenPos.y - playerSize/2 + animationOffset, 
-      playerSize, 
-      playerSize
-    );
+    // Draw circular aura effect beneath player
+    const time = Date.now() * 0.003;
+    const auraRadius = 25 * camera.zoom;
+    const auraPulse = Math.sin(time * 1.5) * 0.2 + 0.8; // Pulsing effect
+    const auraRotation = time * 0.5; // Slow rotation
+    
+    // Draw multiple aura rings for depth
+    for (let i = 0; i < 3; i++) {
+      const ringRadius = auraRadius * (0.6 + i * 0.2) * auraPulse;
+      const alpha = (0.15 - i * 0.03) * auraPulse;
+      
+      // Create gradient for each ring
+      const gradient = ctx.createRadialGradient(
+        playerScreenPos.x, playerScreenPos.y + 10 * camera.zoom,
+        0,
+        playerScreenPos.x, playerScreenPos.y + 10 * camera.zoom,
+        ringRadius
+      );
+      
+      if (whirlwindState.active) {
+        gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha * 0.8})`);
+        gradient.addColorStop(0.7, `rgba(200, 200, 255, ${alpha * 0.4})`);
+        gradient.addColorStop(1, `rgba(255, 255, 255, 0)`);
+      } else {
+        gradient.addColorStop(0, `rgba(100, 150, 255, ${alpha})`);
+        gradient.addColorStop(0.7, `rgba(50, 100, 200, ${alpha * 0.6})`);
+        gradient.addColorStop(1, `rgba(100, 150, 255, 0)`);
+      }
+      
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(playerScreenPos.x, playerScreenPos.y + 10 * camera.zoom, ringRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Draw rotating energy particles around the aura
+    for (let i = 0; i < 8; i++) {
+      const angle = auraRotation + (i * Math.PI * 2) / 8;
+      const particleRadius = auraRadius * 0.8;
+      const particleX = playerScreenPos.x + Math.cos(angle) * particleRadius;
+      const particleY = playerScreenPos.y + 10 * camera.zoom + Math.sin(angle) * particleRadius;
+      const particleSize = 2 * camera.zoom * auraPulse;
+      
+      ctx.fillStyle = whirlwindState.active 
+        ? `rgba(255, 255, 255, ${0.6 * auraPulse})` 
+        : `rgba(150, 200, 255, ${0.8 * auraPulse})`;
+      ctx.beginPath();
+      ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Draw simple player character
+    const playerRadius = 16;
+    
+    // Player body (blue circle)
+    ctx.fillStyle = '#4A90E2';
+    ctx.beginPath();
+    ctx.arc(playerScreenPos.x, playerScreenPos.y + animationOffset, playerRadius * camera.zoom, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Player indicator (white dot in center)
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(playerScreenPos.x, playerScreenPos.y + animationOffset, 4 * camera.zoom, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Add simple breathing animation
+    const pulse = 1 + Math.sin(time * 0.003) * 0.05;
+    ctx.save();
+    ctx.translate(playerScreenPos.x, playerScreenPos.y + animationOffset);
+    ctx.scale(pulse, pulse);
+    ctx.translate(-playerScreenPos.x, -(playerScreenPos.y + animationOffset));
+    
+    // Player level indicator
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `${12 * camera.zoom}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`Lv.${state.player.level}`, playerScreenPos.x, playerScreenPos.y + animationOffset - (playerRadius + 8) * camera.zoom);
     
     ctx.restore();
+    
+    ctx.restore();
+
+    // Draw transparent cone-shaped facing direction indicator
+    if (state.enemies.length > 0) {
+      ctx.save();
+      
+      // Cone properties
+      const coneLength = 40 * camera.zoom;
+      const coneWidth = 30 * camera.zoom;
+      const coneAlpha = 0.3 + Math.sin(time * 2) * 0.1; // Subtle pulsing
+      
+      // Calculate cone vertices
+      const coneStartX = playerScreenPos.x;
+      const coneStartY = playerScreenPos.y + animationOffset;
+      
+      // Cone tip
+      const coneTipX = coneStartX + Math.cos(playerFacingAngle) * coneLength;
+      const coneTipY = coneStartY + Math.sin(playerFacingAngle) * coneLength;
+      
+      // Cone base corners
+      const baseAngle1 = playerFacingAngle - Math.PI/6; // 30 degrees spread
+      const baseAngle2 = playerFacingAngle + Math.PI/6;
+      
+      const baseDistance = 15 * camera.zoom;
+      const base1X = coneStartX + Math.cos(baseAngle1) * baseDistance;
+      const base1Y = coneStartY + Math.sin(baseAngle1) * baseDistance;
+      const base2X = coneStartX + Math.cos(baseAngle2) * baseDistance;
+      const base2Y = coneStartY + Math.sin(baseAngle2) * baseDistance;
+      
+      // Create gradient for cone
+      const gradient = ctx.createLinearGradient(
+        coneStartX, coneStartY,
+        coneTipX, coneTipY
+      );
+      
+      if (whirlwindState.active) {
+        gradient.addColorStop(0, `rgba(255, 255, 255, ${coneAlpha * 0.8})`);
+        gradient.addColorStop(0.5, `rgba(200, 200, 255, ${coneAlpha * 0.6})`);
+        gradient.addColorStop(1, `rgba(255, 255, 255, ${coneAlpha * 0.3})`);
+      } else {
+        gradient.addColorStop(0, `rgba(100, 150, 255, ${coneAlpha * 0.6})`);
+        gradient.addColorStop(0.5, `rgba(150, 200, 255, ${coneAlpha * 0.8})`);
+        gradient.addColorStop(1, `rgba(200, 220, 255, ${coneAlpha * 0.4})`);
+      }
+      
+      // Draw the cone
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.moveTo(base1X, base1Y);
+      ctx.lineTo(coneTipX, coneTipY);
+      ctx.lineTo(base2X, base2Y);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Add subtle border to cone
+      ctx.strokeStyle = whirlwindState.active 
+        ? `rgba(255, 255, 255, ${coneAlpha * 0.5})` 
+        : `rgba(150, 200, 255, ${coneAlpha * 0.7})`;
+      ctx.lineWidth = 1 * camera.zoom;
+      ctx.stroke();
+      
+      // Add small energy particles along cone edges for extra effect
+      for (let i = 0; i < 3; i++) {
+        const t = (i + 1) / 4; // Position along cone edge
+        const edge1X = base1X + (coneTipX - base1X) * t;
+        const edge1Y = base1Y + (coneTipY - base1Y) * t;
+        const edge2X = base2X + (coneTipX - base2X) * t;
+        const edge2Y = base2Y + (coneTipY - base2Y) * t;
+        
+        const particleSize = (1 + Math.sin(time * 3 + i)) * camera.zoom;
+        
+        ctx.fillStyle = whirlwindState.active 
+          ? `rgba(255, 255, 255, ${coneAlpha * 0.8})` 
+          : `rgba(200, 220, 255, ${coneAlpha})`;
+        
+        // Particles on left edge
+        ctx.beginPath();
+        ctx.arc(edge1X, edge1Y, particleSize, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Particles on right edge
+        ctx.beginPath();
+        ctx.arc(edge2X, edge2Y, particleSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      ctx.restore();
+    }
 
     // Draw player HP bar
     drawHpBar(ctx, playerScreenPos.x, playerScreenPos.y - 35 * camera.zoom + animationOffset, 50 * camera.zoom, 8 * camera.zoom, state.player.hp, state.player.maxHp, 1);
@@ -891,60 +1444,197 @@ const GameCanvas = React.memo(function GameCanvas() {
 
     // Debug AOE Range Visualization
     if (debugAOE) {
-      const whirlwindSkill = state.player.skillBar.slots.find((s: any) => s?.id === 'whirlwind')
-      if (whirlwindSkill) {
-        ctx.save()
-        
-        // Calculate Whirlwind range (same calculation as in gameContext)
-        const whirlwindArea = whirlwindSkill.scaling.baseArea! + (whirlwindSkill.level - 1) * whirlwindSkill.scaling.areaPerLevel!
-        const whirlwindRange = whirlwindArea * 30 // Convert area to pixel range
-        const scaledRange = whirlwindRange * camera.zoom
-        
-        // Draw debug AOE circle
-        ctx.globalAlpha = 0.3
-        ctx.strokeStyle = '#00ff00' // Bright green for visibility
-        ctx.lineWidth = 3 * camera.zoom
-        ctx.setLineDash([8 * camera.zoom, 4 * camera.zoom]) // Dashed line
-        
-        ctx.beginPath()
-        ctx.arc(playerScreenPos.x, playerScreenPos.y + animationOffset, scaledRange, 0, Math.PI * 2)
-        ctx.stroke()
-        
-        // Add range text
-        ctx.globalAlpha = 0.8
-        ctx.fillStyle = '#00ff00'
-        ctx.font = `${12 * camera.zoom}px Arial`
-        ctx.textAlign = 'center'
-        ctx.fillText(
-          `AOE: ${Math.round(whirlwindRange)}px`, 
-          playerScreenPos.x, 
-          playerScreenPos.y + animationOffset + scaledRange + 15 * camera.zoom
-        )
-        
-        // Add debug info
-        ctx.fillText(
-          `Area: ${whirlwindArea.toFixed(1)}x | Level: ${whirlwindSkill.level}`, 
-          playerScreenPos.x, 
-          playerScreenPos.y + animationOffset + scaledRange + 30 * camera.zoom
-        )
-        
-        ctx.setLineDash([]) // Reset line dash
-        ctx.restore()
-      }
+      ctx.save()
+      
+      // 1. Draw Player Collision Radius (always visible when debug is on)
+      const playerRadius = 16 // Player collision radius
+      const scaledPlayerRadius = playerRadius * camera.zoom
+      
+      ctx.globalAlpha = 0.4
+      ctx.strokeStyle = '#ff4444' // Red for player collision radius
+      ctx.lineWidth = 2 * camera.zoom
+      ctx.setLineDash([4 * camera.zoom, 2 * camera.zoom]) // Short dashed line
+      
+      ctx.beginPath()
+      ctx.arc(playerScreenPos.x, playerScreenPos.y + animationOffset, scaledPlayerRadius, 0, Math.PI * 2)
+      ctx.stroke()
+      
+      // Player radius label
+      ctx.globalAlpha = 0.8
+      ctx.fillStyle = '#ff4444'
+      ctx.font = `${10 * camera.zoom}px Arial`
+      ctx.textAlign = 'center'
+      ctx.fillText(
+        `Player: ${playerRadius}px`, 
+        playerScreenPos.x, 
+        playerScreenPos.y + animationOffset - scaledPlayerRadius - 8 * camera.zoom
+      )
+      
+      // 2. Draw Skill Ranges for all equipped skills
+      const equippedSkills = state.player.skillBar.slots.filter((s: any) => s !== null)
+      let skillOffset = 0
+      
+      equippedSkills.forEach((skill: any, index: number) => {
+        if (skill && skill.scaling) {
+          let skillRange = 0
+          let skillColor = '#00ff00' // Default green
+          let skillName = skill.name || skill.id
+          
+          // Calculate range based on skill type
+          if (skill.scaling.baseArea && skill.scaling.areaPerLevel) {
+            // AOE skills like Whirlwind
+            const skillArea = skill.scaling.baseArea + (skill.level - 1) * skill.scaling.areaPerLevel
+            skillRange = skillArea * 30 // Convert area to pixel range
+            skillColor = '#00ff00' // Green for AOE
+          } else if (skill.scaling.baseRange && skill.scaling.rangePerLevel) {
+          // Projectile skills with range scaling (like fireball)
+          skillRange = getScaledRange(skill)
+            skillColor = '#ff8844' // Orange for projectiles
+            
+            // Debug logging for fireball range calculation
+            if (skill.id === 'fireball') {
+              console.log('Fireball Debug:', {
+                skillId: skill.id,
+                skillName: skill.name,
+                skillLevel: skill.level,
+                baseRange: skill.scaling.baseRange,
+                rangePerLevel: skill.scaling.rangePerLevel,
+                calculatedRange: skillRange,
+                cameraZoom: camera.zoom,
+                scaledRange: skillRange * camera.zoom
+              })
+            }
+          } else if (skill.id === 'lightning_bolt' || skill.id === 'ice_shard') {
+            // Legacy projectile skills without range scaling - use a default range
+            skillRange = 200 // Default projectile range
+            skillColor = '#ff8844' // Orange for projectiles
+          }
+          
+          if (skillRange > 0) {
+            const scaledSkillRange = skillRange * camera.zoom
+            
+            // Draw skill range circle
+            ctx.globalAlpha = 0.3
+            ctx.strokeStyle = skillColor
+            ctx.lineWidth = 3 * camera.zoom
+            ctx.setLineDash([8 * camera.zoom, 4 * camera.zoom]) // Dashed line
+            
+            ctx.beginPath()
+            ctx.arc(playerScreenPos.x, playerScreenPos.y + animationOffset, scaledSkillRange, 0, Math.PI * 2)
+            ctx.stroke()
+            
+            // Skill range label
+            ctx.globalAlpha = 0.8
+            ctx.fillStyle = skillColor
+            ctx.font = `${11 * camera.zoom}px Arial`
+            ctx.textAlign = 'center'
+            
+            const labelY = playerScreenPos.y + animationOffset + scaledSkillRange + (15 + skillOffset * 15) * camera.zoom
+            
+            // Show detailed debug info for fireball
+            if (skill.id === 'fireball') {
+              ctx.fillText(
+                `${skillName}: ${Math.round(skillRange)}px (Lv.${skill.level}) [base:${skill.scaling.baseRange}, +${skill.scaling.rangePerLevel}/lv, zoom:${camera.zoom.toFixed(2)}]`, 
+                playerScreenPos.x, 
+                labelY
+              )
+            } else {
+              ctx.fillText(
+                `${skillName}: ${Math.round(skillRange)}px (Lv.${skill.level})`, 
+                playerScreenPos.x, 
+                labelY
+              )
+            }
+            
+            skillOffset++
+          }
+        }
+      })
+      
+      // 3. Debug info summary and legend
+      ctx.globalAlpha = 0.9
+      ctx.fillStyle = '#ffffff'
+      ctx.font = `${12 * camera.zoom}px Arial`
+      ctx.textAlign = 'left'
+      ctx.fillText(
+        `Debug AOE (F1) | Skills: ${equippedSkills.length}`, 
+        10 * camera.zoom, 
+        30 * camera.zoom
+      )
+      
+      // 4. Color legend
+      const legendY = 50 * camera.zoom
+      const legendSpacing = 18 * camera.zoom
+      ctx.font = `${10 * camera.zoom}px Arial`
+      
+      // Player radius legend
+      ctx.fillStyle = '#ff4444'
+      ctx.fillText('● Player Collision (16px)', 10 * camera.zoom, legendY)
+      
+      // AOE skills legend
+      ctx.fillStyle = '#00ff00'
+      ctx.fillText('● AOE Skills', 10 * camera.zoom, legendY + legendSpacing)
+      
+      // Ranged skills legend
+      ctx.fillStyle = '#4488ff'
+      ctx.fillText('● Ranged Skills', 10 * camera.zoom, legendY + legendSpacing * 2)
+      
+      // Projectile skills legend
+      ctx.fillStyle = '#ff8844'
+      ctx.fillText('● Projectile Skills', 10 * camera.zoom, legendY + legendSpacing * 3)
+      
+      ctx.setLineDash([]) // Reset line dash
+      ctx.restore()
     }
 
-    // draw projectiles
-    projectiles.forEach(p => {
+    // Trail rendering removed - using simple fireball visuals
+
+    // draw projectiles - use calculated projectiles for real-time rendering
+    const currentProjectiles = animationStateRef.current.calculatedProjectiles || projectiles
+    currentProjectiles.forEach(p => {
       const projectileScreenPos = worldToScreen(p.x, p.y);
       ctx.save();
-      if (p.glow) {
-        ctx.shadowColor = p.color;
-        ctx.shadowBlur = 10 * camera.zoom;
+      
+      if (p.type === 'fireball') {
+        // Simple fireball rendering matching test environment
+        ctx.translate(projectileScreenPos.x, projectileScreenPos.y);
+        if (p.rotation !== undefined) {
+          ctx.rotate(p.rotation * Math.PI / 180);
+        }
+        
+        // Outer glow
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 15 * camera.zoom);
+        gradient.addColorStop(0, 'rgba(255, 100, 0, 0.8)');
+        gradient.addColorStop(0.5, 'rgba(255, 50, 0, 0.4)');
+        gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, 15 * camera.zoom, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Core
+        ctx.fillStyle = '#FFD700';
+        ctx.beginPath();
+        ctx.arc(0, 0, 8 * camera.zoom, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Inner core
+        ctx.fillStyle = '#FFF';
+        ctx.beginPath();
+        ctx.arc(0, 0, 4 * camera.zoom, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Standard projectile rendering
+        if (p.glow) {
+          ctx.shadowColor = p.color;
+          ctx.shadowBlur = 10 * camera.zoom;
+        }
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(projectileScreenPos.x, projectileScreenPos.y, p.radius * camera.zoom, 0, Math.PI * 2);
+        ctx.fill();
       }
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(projectileScreenPos.x, projectileScreenPos.y, p.radius * camera.zoom, 0, Math.PI * 2);
-      ctx.fill();
+      
       ctx.restore();
     });
 
@@ -1002,6 +1692,84 @@ const GameCanvas = React.memo(function GameCanvas() {
         ctx.fillStyle = '#ffffff';
         ctx.beginPath();
         ctx.arc(effectScreenPos.x, effectScreenPos.y, radius * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.restore();
+      } else if (e.kind === 'fireball_explosion') {
+        ctx.save();
+        const explosionProgress = Math.min(1, age / e.ttl);
+        ctx.globalAlpha = (1 - explosionProgress) * 0.9;
+        
+        // Create expanding fireball explosion
+        const radius = (e.size || 24) * explosionProgress * 1.5;
+        
+        // Outer fire ring
+        ctx.fillStyle = e.color;
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Middle orange ring
+        ctx.globalAlpha = (1 - explosionProgress) * 0.7;
+        ctx.fillStyle = '#ff8800';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Inner bright core
+        ctx.globalAlpha = (1 - explosionProgress) * 0.5;
+        ctx.fillStyle = '#ffff00';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // White hot center
+        ctx.globalAlpha = (1 - explosionProgress) * 0.3;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, radius * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Explosion sparks
+        ctx.globalAlpha = (1 - explosionProgress) * 0.8;
+        ctx.fillStyle = '#ff6600';
+        for (let i = 0; i < 12; i++) {
+          const angle = (i / 12) * Math.PI * 2 + (age * 0.01);
+          const distance = radius * (1.2 + Math.sin(age * 0.005 + i) * 0.3);
+          const x = effectScreenPos.x + Math.cos(angle) * distance;
+          const y = effectScreenPos.y + Math.sin(angle) * distance;
+          const sparkSize = (4 + Math.sin(age * 0.008 + i) * 2) * camera.zoom * (1 - explosionProgress);
+          ctx.beginPath();
+          ctx.arc(x, y, sparkSize, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        
+        ctx.restore();
+      } else if (e.kind === 'fire_particle') {
+        ctx.save();
+        const particleProgress = Math.min(1, age / e.ttl);
+        ctx.globalAlpha = (1 - particleProgress) * 0.8;
+        
+        // Create floating fire particle
+        const size = (e.size || 3) * camera.zoom * (1 - particleProgress * 0.5);
+        const flicker = 1 + Math.sin(age * 0.02) * 0.3;
+        
+        // Particle glow
+        ctx.shadowColor = e.color;
+        ctx.shadowBlur = 8 * camera.zoom;
+        
+        // Main particle body
+        ctx.fillStyle = e.color;
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, size * flicker, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Bright center
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = (1 - particleProgress) * 0.6;
+        ctx.fillStyle = '#ffaa00';
+        ctx.beginPath();
+        ctx.arc(effectScreenPos.x, effectScreenPos.y, size * 0.6 * flicker, 0, Math.PI * 2);
         ctx.fill();
         
         ctx.restore();
@@ -1733,8 +2501,12 @@ const GameCanvas = React.memo(function GameCanvas() {
         ref={canvasRef} 
         width={CANVAS_W} 
         height={CANVAS_H} 
-        className="game-canvas" 
+        className="game-canvas"
+        tabIndex={0}
+        style={{ outline: 'none' }}
+        onClick={() => canvasRef.current?.focus()}
       />
+
     </div>
   )
 })

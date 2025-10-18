@@ -1,6 +1,7 @@
 import React, { useMemo, useCallback, useState } from 'react'
 import { useGame } from '../systems/gameContext'
 import { StatTooltip, calculateStatBreakdown, STAT_DESCRIPTIONS } from './StatTooltip'
+import { calculatePassiveTreeStats, getSkillModifiersFromTree } from '../systems/passiveTree'
 
 // Utility functions for rarity and element formatting
 function rarityColor(r: string | undefined): string {
@@ -51,6 +52,8 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
   const { state, actions } = useGame()
   const p = state.player
   const skills = state.skills || {}
+  
+
   
   // Tooltip state
   const [tooltip, setTooltip] = useState<{
@@ -116,7 +119,8 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
     const powerMultiplier = Math.pow(1.05, (skills['power']||0))
     const attackSpeed = (p.attackSpeed || 1) * (1 + (skills['quick']||0)*0.05)
     const projectileSpeed = (p.projectileSpeed || 1) * (1 + (skills['arcane']||0)*0.1)
-    const totalDps = (p.baseDps + (p.equipped?.power||0)) * powerMultiplier + (p.dps - p.baseDps)
+    // Use the correctly calculated DPS from player stats
+    const totalDps = (p.dps || 0) * powerMultiplier
     const estimatedDps = (totalDps * attackSpeed).toFixed(2)
     
     return {
@@ -126,7 +130,7 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
       totalDps,
       estimatedDps
     }
-  }, [p.attackSpeed, p.baseDps, p.dps, p.equipped?.power, skills])
+  }, [p.attackSpeed, p.baseDps, p.dps, p.projectileSpeed, skills])
   
   // Memoize equipment power calculation
   const equipmentPower = useMemo(() => {
@@ -167,6 +171,12 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
     healthRegen: p.healthRegen || 0,
     manaRegen: p.manaRegen || 0
   }), [p.critChance, p.equipped?.rarity, p.dodgeChance, p.blockChance, p.lifeSteal, p.armor, p.healthRegen, p.manaRegen])
+
+  // Memoize passive tree stats
+  const passiveTreeStats = useMemo(() => {
+    if (!p.passiveTreeData || !p.passiveTreeState) return null
+    return calculatePassiveTreeStats(p.passiveTreeData, p.passiveTreeState)
+  }, [p.passiveTreeData, p.passiveTreeState])
   
   // Memoize reset callback
   const handleReset = useCallback(() => {
@@ -182,6 +192,8 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
       
       {/* Character Stats */}
       <div className="flex-1 p-3 space-y-2 overflow-y-auto text-xs">
+
+        
         {/* Basic Info */}
         <div className="bg-gray-800/50 p-2 rounded border border-gray-700">
           <h3 className="text-xs font-semibold text-blue-300 mb-1">📊 Basic Info</h3>
@@ -335,99 +347,435 @@ const CharacterStatusPanel = React.memo(function CharacterStatusPanel() {
           </div>
         </div>
 
-        {/* Skill Tree Bonuses */}
-        <div className="bg-gray-800/50 p-2 rounded border border-gray-700">
-          <h3 className="text-xs font-semibold text-yellow-300 mb-1">🌟 Skill Tree Bonuses</h3>
-          <div className="grid grid-cols-2 gap-1 text-xs">
-            <div className="flex justify-between">
-              <span>💪 Strength:</span>
-              <span className="text-red-400">+{skills['strength'] || 0} damage</span>
-            </div>
-            <div className="flex justify-between">
-              <span>🎯 Precision:</span>
-              <span className="text-red-400">+{skills['precision'] || 0}% crit</span>
-            </div>
-            <div className="flex justify-between">
-              <span>⚡ Agility:</span>
-              <span className="text-green-400">+{skills['agility'] || 0}% dodge</span>
-            </div>
-            <div className="flex justify-between">
-              <span>🛡️ Resilience:</span>
-              <span className="text-gray-300">+{skills['resilience'] || 0} armor</span>
-            </div>
-            <div className="flex justify-between">
-              <span>❤️ Endurance:</span>
-              <span className="text-red-300">+{(skills['endurance'] || 0) * 10} HP</span>
-            </div>
-            <div className="flex justify-between">
-              <span>⚡ Power:</span>
-              <span className="text-orange-400">+{((skills['power'] || 0) * 5).toFixed(0)}% dmg</span>
-            </div>
-            <div className="flex justify-between">
-              <span>🏃 Quick:</span>
-              <span className="text-yellow-300">+{((skills['quick'] || 0) * 5).toFixed(0)}% speed</span>
-            </div>
-            <div className="flex justify-between">
-              <span>🔮 Arcane:</span>
-              <span className="text-cyan-400">+{((skills['arcane'] || 0) * 10).toFixed(0)}% proj</span>
-            </div>
-            <div className="flex justify-between">
-              <span>💰 Fortune:</span>
-              <span className="text-yellow-400">+{((skills['fortune'] || 0) * 10).toFixed(0)}% gold/loot</span>
-            </div>
-            <div className="flex justify-between">
-              <span>🪙 Gold Find:</span>
-              <span className="text-yellow-300">+{((p.calculatedStats?.goldFind || 0) * 100).toFixed(0)}%</span>
-            </div>
-            <div className="flex justify-between">
-              <span>🔍 Magic Find:</span>
-              <span className="text-purple-400">+{((p.calculatedStats?.magicFind || 0) * 100).toFixed(0)}%</span>
+        {/* Elemental Damage */}
+        {(p.calculatedStats?.fireDamage || p.calculatedStats?.iceDamage || p.calculatedStats?.lightningDamage || p.calculatedStats?.poisonDamage) && (
+          <div className="bg-gray-800/50 p-2 rounded border border-gray-700">
+            <h3 className="text-xs font-semibold text-orange-300 mb-1">🔥 Elemental Damage</h3>
+            <div className="grid grid-cols-2 gap-1 text-xs">
+              {(p.calculatedStats?.fireDamage || 0) > 0 && (
+                <StatRow 
+                  label="🔥 Fire" 
+                  value={p.calculatedStats?.fireDamage || 0} 
+                  color="text-red-400" 
+                  statType="fireDamage"
+                />
+              )}
+              {(p.calculatedStats?.iceDamage || 0) > 0 && (
+                <StatRow 
+                  label="❄️ Ice" 
+                  value={p.calculatedStats?.iceDamage || 0} 
+                  color="text-blue-300" 
+                  statType="iceDamage"
+                />
+              )}
+              {(p.calculatedStats?.lightningDamage || 0) > 0 && (
+                <StatRow 
+                  label="⚡ Lightning" 
+                  value={p.calculatedStats?.lightningDamage || 0} 
+                  color="text-yellow-300" 
+                  statType="lightningDamage"
+                />
+              )}
+              {(p.calculatedStats?.poisonDamage || 0) > 0 && (
+                <StatRow 
+                  label="☠️ Poison" 
+                  value={p.calculatedStats?.poisonDamage || 0} 
+                  color="text-green-300" 
+                  statType="poisonDamage"
+                />
+              )}
             </div>
           </div>
+        )}
+
+        {/* Elemental Resistances */}
+        {(p.calculatedStats?.fireResistance || p.calculatedStats?.iceResistance || p.calculatedStats?.lightningResistance || p.calculatedStats?.poisonResistance) && (
+          <div className="bg-gray-800/50 p-2 rounded border border-gray-700">
+            <h3 className="text-xs font-semibold text-cyan-300 mb-1">🛡️ Resistances</h3>
+            <div className="grid grid-cols-2 gap-1 text-xs">
+              {(p.calculatedStats?.fireResistance || 0) > 0 && (
+                <StatRow 
+                  label="🔥 Fire Res" 
+                  value={p.calculatedStats?.fireResistance || 0} 
+                  color="text-red-400" 
+                  statType="fireResistance"
+                  suffix="%"
+                />
+              )}
+              {(p.calculatedStats?.iceResistance || 0) > 0 && (
+                <StatRow 
+                  label="❄️ Ice Res" 
+                  value={p.calculatedStats?.iceResistance || 0} 
+                  color="text-blue-300" 
+                  statType="iceResistance"
+                  suffix="%"
+                />
+              )}
+              {(p.calculatedStats?.lightningResistance || 0) > 0 && (
+                <StatRow 
+                  label="⚡ Lightning Res" 
+                  value={p.calculatedStats?.lightningResistance || 0} 
+                  color="text-yellow-300" 
+                  statType="lightningResistance"
+                  suffix="%"
+                />
+              )}
+              {(p.calculatedStats?.poisonResistance || 0) > 0 && (
+                <StatRow 
+                  label="☠️ Poison Res" 
+                  value={p.calculatedStats?.poisonResistance || 0} 
+                  color="text-green-300" 
+                  statType="poisonResistance"
+                  suffix="%"
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Advanced Combat Stats */}
+        {(p.calculatedStats?.armorPenetration || p.calculatedStats?.damageMultiplier || p.calculatedStats?.stunChance || p.calculatedStats?.damageReduction || p.calculatedStats?.reflectDamage) && (
+          <div className="bg-gray-800/50 p-2 rounded border border-gray-700">
+            <h3 className="text-xs font-semibold text-purple-300 mb-1">⚔️ Advanced Combat</h3>
+            <div className="grid grid-cols-2 gap-1 text-xs">
+              {(p.calculatedStats?.armorPenetration || 0) > 0 && (
+                <StatRow 
+                  label="🗡️ Armor Pen" 
+                  value={p.calculatedStats?.armorPenetration || 0} 
+                  color="text-orange-400" 
+                  statType="armorPenetration"
+                  suffix="%"
+                />
+              )}
+              {(p.calculatedStats?.damageMultiplier || 0) > 0 && (
+                <StatRow 
+                  label="💥 Damage Multi" 
+                  value={p.calculatedStats?.damageMultiplier || 0} 
+                  color="text-red-500" 
+                  statType="damageMultiplier"
+                  suffix="%"
+                />
+              )}
+              {(p.calculatedStats?.stunChance || 0) > 0 && (
+                <StatRow 
+                  label="😵 Stun Chance" 
+                  value={p.calculatedStats?.stunChance || 0} 
+                  color="text-yellow-400" 
+                  statType="stunChance"
+                  suffix="%"
+                />
+              )}
+              {(p.calculatedStats?.damageReduction || 0) > 0 && (
+                <StatRow 
+                  label="🛡️ Damage Red" 
+                  value={p.calculatedStats?.damageReduction || 0} 
+                  color="text-blue-400" 
+                  statType="damageReduction"
+                  suffix="%"
+                />
+              )}
+              {(p.calculatedStats?.reflectDamage || 0) > 0 && (
+                <StatRow 
+                  label="🪞 Reflect" 
+                  value={p.calculatedStats?.reflectDamage || 0} 
+                  color="text-purple-400" 
+                  statType="reflectDamage"
+                  suffix="%"
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Special Effects */}
+        {(p.calculatedStats?.doubleDropChance || p.calculatedStats?.cleaveChance || p.calculatedStats?.cooldownReduction || p.calculatedStats?.movementSpeed) && (
+          <div className="bg-gray-800/50 p-2 rounded border border-gray-700">
+            <h3 className="text-xs font-semibold text-pink-300 mb-1">✨ Special Effects</h3>
+            <div className="grid grid-cols-2 gap-1 text-xs">
+              {(p.calculatedStats?.doubleDropChance || 0) > 0 && (
+                <StatRow 
+                  label="🎁 Double Drop" 
+                  value={p.calculatedStats?.doubleDropChance || 0} 
+                  color="text-yellow-400" 
+                  statType="doubleDropChance"
+                  suffix="%"
+                />
+              )}
+              {(p.calculatedStats?.cleaveChance || 0) > 0 && (
+                <StatRow 
+                  label="⚔️ Cleave" 
+                  value={p.calculatedStats?.cleaveChance || 0} 
+                  color="text-orange-400" 
+                  statType="cleaveChance"
+                  suffix="%"
+                />
+              )}
+              {(p.calculatedStats?.cooldownReduction || 0) > 0 && (
+                <StatRow 
+                  label="⏰ CDR" 
+                  value={p.calculatedStats?.cooldownReduction || 0} 
+                  color="text-cyan-400" 
+                  statType="cooldownReduction"
+                  suffix="%"
+                />
+              )}
+              {(p.calculatedStats?.movementSpeed || 0) > 0 && (
+                <StatRow 
+                  label="🏃 Move Speed" 
+                  value={p.calculatedStats?.movementSpeed || 0} 
+                  color="text-green-400" 
+                  statType="movementSpeed"
+                  suffix="%"
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Passive Tree Bonuses */}
+        <div className="bg-gray-800/50 p-2 rounded border border-gray-700">
+          <h3 className="text-xs font-semibold text-yellow-300 mb-1">🌟 Passive Tree Bonuses</h3>
+          {passiveTreeStats ? (
+            <div className="grid grid-cols-2 gap-1 text-xs">
+              {(passiveTreeStats.damage || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>💪 Damage:</span>
+                  <span className="text-red-400">+{passiveTreeStats.damage}</span>
+                </div>
+              )}
+              {(passiveTreeStats.health || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>❤️ Health:</span>
+                  <span className="text-red-300">+{passiveTreeStats.health}</span>
+                </div>
+              )}
+              {(passiveTreeStats.mana || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>💙 Mana:</span>
+                  <span className="text-blue-400">+{passiveTreeStats.mana}</span>
+                </div>
+              )}
+              {(passiveTreeStats.armor || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>🛡️ Armor:</span>
+                  <span className="text-gray-300">+{passiveTreeStats.armor}</span>
+                </div>
+              )}
+              {(passiveTreeStats.critChance || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>🎯 Crit Chance:</span>
+                  <span className="text-red-400">+{((passiveTreeStats.critChance || 0) * 100).toFixed(1)}%</span>
+                </div>
+              )}
+              {(passiveTreeStats.critMultiplier || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>💥 Crit Multi:</span>
+                  <span className="text-red-500">+{((passiveTreeStats.critMultiplier || 0) * 100).toFixed(1)}%</span>
+                </div>
+              )}
+              {(passiveTreeStats.attackSpeed || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>⚡ Attack Speed:</span>
+                  <span className="text-yellow-300">+{((passiveTreeStats.attackSpeed || 0) * 100).toFixed(1)}%</span>
+                </div>
+              )}
+              {(passiveTreeStats.dodgeChance || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>🏃 Dodge:</span>
+                  <span className="text-green-400">+{((passiveTreeStats.dodgeChance || 0) * 100).toFixed(1)}%</span>
+                </div>
+              )}
+              {(passiveTreeStats.goldFind || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>🪙 Gold Find:</span>
+                  <span className="text-yellow-300">+{((passiveTreeStats.goldFind || 0) * 100).toFixed(1)}%</span>
+                </div>
+              )}
+              {(passiveTreeStats.magicFind || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>🔍 Magic Find:</span>
+                  <span className="text-purple-400">+{((passiveTreeStats.magicFind || 0) * 100).toFixed(1)}%</span>
+                </div>
+              )}
+              {(passiveTreeStats.experienceBonus || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>📚 Exp Bonus:</span>
+                  <span className="text-cyan-400">+{((passiveTreeStats.experienceBonus || 0) * 100).toFixed(1)}%</span>
+                </div>
+              )}
+              {/* Note: projectileSpeed is not in EquipmentStats interface, removing for now */}
+            </div>
+          ) : (
+            <div className="text-xs text-gray-400">No passive tree bonuses allocated</div>
+          )}
         </div>
 
-        {/* Equipment Summary */}
+        {/* Consolidated Equipment Bonuses */}
         {(() => {
-          // Check new equipment system first, then legacy
-          const equippedWeapon = p.equipment?.weapon || p.equipped
-          
-          if (equippedWeapon) {
-            return (
-              <div className="bg-gray-800/50 p-2 rounded border border-gray-700">
-                <h3 className="text-xs font-semibold text-yellow-300 mb-1">🗡️ Equipped Weapon</h3>
-                <div className="text-xs space-y-1">
-                  <div className="flex justify-between">
-                    <span>Type:</span>
-                    <span className="text-gray-300">{equippedWeapon.type || equippedWeapon.name || 'None'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Rarity:</span>
-                    <span className={rarityColor(equippedWeapon.rarity)}>{equippedWeapon.rarity || 'Common'}</span>
-                  </div>
-                  {equippedWeapon.element && (
-                    <div className="flex justify-between">
-                      <span>Element:</span>
-                      <span className={elementColor(equippedWeapon.element)}>
-                        {formatElement(equippedWeapon.element)} {equippedWeapon.element}
-                      </span>
-                    </div>
-                  )}
-                  {(equippedWeapon.power || equippedWeapon.baseStats?.damage) && (
-                    <div className="flex justify-between">
-                      <span>Power:</span>
-                      <span className="text-orange-400">+{equippedWeapon.power || equippedWeapon.baseStats?.damage || 0}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
+          // Calculate consolidated stats from ALL equipped gear
+          const calculateAllEquipmentStats = () => {
+            const consolidatedStats: any = {}
+            const equippedItems: any[] = []
+            
+            // Collect all equipped items
+            if (p.equipment) {
+              Object.entries(p.equipment).forEach(([slot, item]) => {
+                if (item && typeof item === 'object') {
+                  equippedItems.push({ slot, item })
+                }
+              })
+            }
+            
+            // Legacy weapon support
+            if (p.equipped && !p.equipment?.weapon) {
+              equippedItems.push({ slot: 'weapon', item: p.equipped })
+            }
+            
+            // Calculate total stats from all equipment
+            equippedItems.forEach(({ item }) => {
+              // Add base stats
+              if (item.baseStats) {
+                Object.entries(item.baseStats).forEach(([stat, value]) => {
+                  if (typeof value === 'number' && value > 0) {
+                    consolidatedStats[stat] = (consolidatedStats[stat] || 0) + value
+                  }
+                })
+              }
+              
+              // Add affix stats
+              if (item.affixes) {
+                item.affixes.forEach((affix: any) => {
+                  const stat = affix.stat
+                  const value = affix.value
+                  if (typeof value === 'number' && value > 0) {
+                    consolidatedStats[stat] = (consolidatedStats[stat] || 0) + value
+                  }
+                })
+              }
+              
+              // Add stone stats
+              if (item.sockets && item.sockets.stones) {
+                item.sockets.stones.forEach((stoneId: string | null) => {
+                  if (stoneId && p.stones) {
+                    const stone = p.stones.find((s: any) => s.id === stoneId)
+                    if (stone) {
+                      // Add stone base stats
+                      if (stone.baseStats) {
+                        Object.entries(stone.baseStats).forEach(([stat, value]) => {
+                          if (typeof value === 'number' && value > 0) {
+                            consolidatedStats[stat] = (consolidatedStats[stat] || 0) + value
+                          }
+                        })
+                      }
+                      
+                      // Add stone affix stats
+                      if (stone.affixes) {
+                        stone.affixes.forEach((affix: any) => {
+                          const stat = affix.stat
+                          const value = affix.value
+                          if (typeof value === 'number' && value > 0) {
+                            consolidatedStats[stat] = (consolidatedStats[stat] || 0) + value
+                          }
+                        })
+                      }
+                    }
+                  }
+                })
+              }
+            })
+            
+            return { consolidatedStats, equippedItems }
           }
+          
+          const formatStatValue = (stat: string, value: number): string => {
+            const percentageStats = [
+              'critChance', 'dodgeChance', 'blockChance', 'lifeSteal', 'manaSteal',
+              'fireResistance', 'coldResistance', 'lightningResistance', 'chaosResistance',
+              'iceResistance', 'poisonResistance', 'spellResistance', 'stunResistance',
+              'increasedDamage', 'increasedAttackSpeed', 'increasedCastSpeed',
+              'increasedMovementSpeed', 'increasedCritMultiplier', 'attackSpeed',
+              'castSpeed', 'movementSpeed', 'damageReduction', 'reflectDamage',
+              'armorPenetration', 'damageMultiplier', 'stunChance', 'doubleDropChance',
+              'cleaveChance', 'cooldownReduction', 'goldFind', 'magicFind', 'experienceBonus',
+              'healthRegen', 'manaRegen'
+            ]
+            
+            if (percentageStats.includes(stat)) {
+              return `${(value * 100).toFixed(1)}%`
+            }
+            
+            return value.toFixed(1)
+          }
+          
+          const getStatDisplayName = (stat: string): string => {
+            const statNames: Record<string, string> = {
+              damage: 'Damage', armor: 'Armor', health: 'Health', mana: 'Mana',
+              strength: 'Strength', dexterity: 'Dexterity', intelligence: 'Intelligence', 
+              vitality: 'Vitality', luck: 'Luck', critChance: 'Crit Chance',
+              critMultiplier: 'Crit Multiplier', attackSpeed: 'Attack Speed',
+              dodgeChance: 'Dodge Chance', blockChance: 'Block Chance',
+              lifeSteal: 'Life Steal', manaSteal: 'Mana Steal',
+              fireDamage: 'Fire Damage', iceDamage: 'Ice Damage',
+              lightningDamage: 'Lightning Damage', poisonDamage: 'Poison Damage',
+              fireResistance: 'Fire Resistance', iceResistance: 'Ice Resistance',
+              lightningResistance: 'Lightning Resistance', poisonResistance: 'Poison Resistance',
+              armorPenetration: 'Armor Penetration', damageMultiplier: 'Damage Multiplier',
+              stunChance: 'Stun Chance', damageReduction: 'Damage Reduction',
+              reflectDamage: 'Reflect Damage', goldFind: 'Gold Find',
+              magicFind: 'Magic Find', experienceBonus: 'Experience Bonus',
+              healthRegen: 'Health Regen', manaRegen: 'Mana Regen'
+            }
+            return statNames[stat] || stat.charAt(0).toUpperCase() + stat.slice(1)
+          }
+          
+          const { consolidatedStats, equippedItems } = calculateAllEquipmentStats()
           
           return (
             <div className="bg-gray-800/50 p-2 rounded border border-gray-700">
-              <h3 className="text-xs font-semibold text-yellow-300 mb-1">🗡️ Equipped Weapon</h3>
-              <div className="text-xs">
-                <span className="text-gray-500">No weapon equipped</span>
+              <h3 className="text-xs font-semibold text-yellow-300 mb-1">⚔️ All Equipment Bonuses</h3>
+              <div className="text-xs space-y-1">
+                {/* Equipment Count */}
+                <div className="flex justify-between mb-2">
+                  <span className="text-gray-400">Equipped Items:</span>
+                  <span className="text-blue-400">{equippedItems.length}</span>
+                </div>
+                
+                {/* Consolidated Stats */}
+                {Object.keys(consolidatedStats).length > 0 ? (
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {Object.entries(consolidatedStats)
+                      .filter(([_, value]) => typeof value === 'number' && value > 0)
+                      .sort(([a], [b]) => getStatDisplayName(a).localeCompare(getStatDisplayName(b)))
+                      .map(([stat, value]) => (
+                        <div key={stat} className="flex justify-between">
+                          <span className="text-gray-300">{getStatDisplayName(stat)}:</span>
+                          <span className="text-green-400">+{formatStatValue(stat, value as number)}</span>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="text-gray-500 text-center py-2">
+                    {equippedItems.length === 0 ? 'No equipment equipped' : 'No stat bonuses from equipment'}
+                  </div>
+                )}
+                
+                {/* Equipment Slots Summary */}
+                {equippedItems.length > 0 && (
+                  <div className="border-t border-gray-600 pt-1 mt-2">
+                    <div className="text-blue-300 font-medium mb-1">Equipped Slots:</div>
+                    <div className="flex flex-wrap gap-1">
+                      {equippedItems.map(({ slot, item }) => (
+                        <span 
+                          key={slot} 
+                          className={`px-1 py-0.5 rounded text-xs ${rarityColor(item.rarity)} bg-gray-700/50`}
+                          title={`${item.name || item.type || 'Unknown'} (${item.rarity || 'Common'})`}
+                        >
+                          {slot.charAt(0).toUpperCase() + slot.slice(1)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )

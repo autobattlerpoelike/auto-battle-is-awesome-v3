@@ -1,4 +1,4 @@
-export type EnemyType = 'melee' | 'ranged' | 'caster' | 'tank' | 'assassin' | 'boss'
+export type EnemyType = 'melee' | 'ranged' | 'caster' | 'tank' | 'assassin' | 'boss' | 'beast' | 'undead' | 'elemental' | 'demon' | 'construct'
 export type SpecialAbility = 'berserker' | 'precise' | 'regeneration' | 'shield' | 'poison' | 'freeze' | 'lightning' | 'summon'
 
 export interface Position {
@@ -20,6 +20,7 @@ export type Enemy = {
   statusEffects?: string[]
   armor?: number
   position?: Position // Add position data for distance calculations
+  deathTime?: number // Timestamp when enemy died for death animation timing
 }
 
 const enemyNames = {
@@ -28,7 +29,12 @@ const enemyNames = {
   caster: ['Goblin Shaman', 'Orc Mage', 'Necromancer', 'Dark Wizard', 'Lich'],
   tank: ['Orc Guardian', 'Stone Golem', 'Armored Knight', 'Shield Bearer', 'Iron Colossus'],
   assassin: ['Shadow Rogue', 'Dark Assassin', 'Poison Blade', 'Night Stalker', 'Void Walker'],
-  boss: ['Goblin King', 'Orc Chieftain', 'Lich Lord', 'Dragon', 'Demon Lord']
+  boss: ['Goblin King', 'Orc Chieftain', 'Lich Lord', 'Dragon', 'Demon Lord'],
+  beast: ['Dire Wolf', 'Giant Spider', 'Cave Bear', 'Savage Boar', 'Frost Tiger'],
+  undead: ['Zombie', 'Wraith', 'Skeleton Mage', 'Banshee', 'Death Knight'],
+  elemental: ['Fire Elemental', 'Ice Elemental', 'Lightning Elemental', 'Earth Elemental', 'Wind Elemental'],
+  demon: ['Imp', 'Hellhound', 'Succubus', 'Balrog', 'Pit Lord'],
+  construct: ['Clockwork Golem', 'Crystal Guardian', 'Steam Automaton', 'Arcane Sentinel', 'War Machine']
 }
 
 const specialAbilities: SpecialAbility[] = ['berserker', 'precise', 'regeneration', 'shield', 'poison', 'freeze', 'lightning']
@@ -86,10 +92,15 @@ export function spawnEnemyForLevel(level: number, kind?: EnemyType): Enemy {
     type = kind
   } else {
     const roll = Math.random()
-    if (roll > 0.92) type = 'assassin'
-    else if (roll > 0.85) type = 'tank'
-    else if (roll > 0.75) type = 'caster'
-    else if (roll > 0.55) type = 'ranged'
+    if (roll > 0.95) type = 'construct'
+    else if (roll > 0.90) type = 'demon'
+    else if (roll > 0.85) type = 'elemental'
+    else if (roll > 0.80) type = 'undead'
+    else if (roll > 0.75) type = 'beast'
+    else if (roll > 0.70) type = 'assassin'
+    else if (roll > 0.60) type = 'tank'
+    else if (roll > 0.45) type = 'caster'
+    else if (roll > 0.25) type = 'ranged'
     else type = 'melee'
   }
   
@@ -111,6 +122,25 @@ export function spawnEnemyForLevel(level: number, kind?: EnemyType): Enemy {
       break
     case 'caster':
       baseHp = Math.floor(baseHp * 0.9)
+      break
+    case 'beast':
+      baseHp = Math.floor(baseHp * 1.3)
+      armor = Math.floor(level * 0.1)
+      break
+    case 'undead':
+      baseHp = Math.floor(baseHp * 1.1)
+      break
+    case 'elemental':
+      baseHp = Math.floor(baseHp * 1.2)
+      armor = Math.floor(level * 0.2)
+      break
+    case 'demon':
+      baseHp = Math.floor(baseHp * 1.4)
+      armor = Math.floor(level * 0.15)
+      break
+    case 'construct':
+      baseHp = Math.floor(baseHp * 1.6)
+      armor = Math.floor(level * 0.4)
       break
   }
   
@@ -143,6 +173,11 @@ export function getEnemyTypeColor(type: EnemyType): string {
     case 'tank': return 'text-gray-400'
     case 'assassin': return 'text-purple-400'
     case 'boss': return 'text-yellow-400'
+    case 'beast': return 'text-orange-400'
+    case 'undead': return 'text-gray-300'
+    case 'elemental': return 'text-cyan-400'
+    case 'demon': return 'text-red-600'
+    case 'construct': return 'text-amber-400'
     default: return 'text-white'
   }
 }

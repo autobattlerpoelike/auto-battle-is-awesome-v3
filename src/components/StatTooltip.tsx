@@ -1,10 +1,12 @@
 import React from 'react'
 import { Player } from '../systems/player'
+import { calculateStoneStats } from '../utils/equipmentTooltip'
 
 export interface StatBreakdown {
   base: number
   attributeBonus: number
   equipmentBonus: number
+  stoneBonus: number
   skillTreeBonus: number
   total: number
 }
@@ -25,18 +27,81 @@ export const STAT_DESCRIPTIONS: Record<string, string> = {
   dexterity: 'Increases critical chance (+0.5%) and dodge (+0.3%). Base 10, increased by equipment.',
   intelligence: 'Increases mana (+1) and mana regeneration (+0.2). Base 10, increased by equipment.',
   vitality: 'Increases health (+3) and health regeneration (+0.1). Base 10, increased by equipment.',
-  luck: 'Increases critical chance (+0.5%). Base 5, increased by equipment.'
+  luck: 'Increases critical chance (+0.5%). Base 5, increased by equipment.',
+  
+  // Elemental damage bonuses
+  fireDamage: 'Additional fire damage added to attacks. Effective against ice-resistant enemies.',
+  iceDamage: 'Additional ice damage added to attacks. Can slow enemies and is effective against fire-resistant foes.',
+  lightningDamage: 'Additional lightning damage added to attacks. Fast and effective against armored enemies.',
+  poisonDamage: 'Additional poison damage that deals damage over time. Effective against high-health enemies.',
+  
+  // Elemental resistances
+  fireResistance: 'Reduces fire damage taken. Essential for surviving fire-based attacks.',
+  iceResistance: 'Reduces ice damage taken and slowing effects. Helps maintain mobility.',
+  lightningResistance: 'Reduces lightning damage taken. Important against fast, shocking attacks.',
+  poisonResistance: 'Reduces poison damage and duration. Crucial for surviving toxic environments.',
+  
+  // Advanced combat stats
+  armorPenetration: 'Percentage of enemy armor ignored when dealing damage. Effective against heavily armored foes.',
+  damageMultiplier: 'Multiplies all damage dealt. A powerful stat that scales with all damage sources.',
+  stunChance: 'Chance to stun enemies on hit, preventing them from acting temporarily.',
+  damageReduction: 'Reduces all incoming damage by a percentage. Stacks multiplicatively with armor.',
+  movementSpeed: 'Increases movement and positioning speed. Helps with kiting and positioning.',
+  reflectDamage: 'Returns a percentage of received damage back to the attacker.',
+  
+  // Special utility effects
+  doubleDropChance: 'Chance for enemies to drop twice the normal loot. Excellent for farming.',
+  cleaveChance: 'Chance for attacks to hit multiple nearby enemies simultaneously.',
+  spellResistance: 'Reduces damage from magical attacks and spell effects.',
+  stunResistance: 'Reduces the duration and chance of being stunned by enemies.',
+  cooldownReduction: 'Reduces the cooldown time of all abilities and skills.',
+  
+  // Special effects
+  manaSteal: 'Percentage of damage dealt returned as mana. Helps sustain mana-intensive builds.',
+  thorns: 'Deals damage to attackers when you take damage. Passive retaliation effect.'
 }
 
 export function calculateStatBreakdown(player: Player, statType: string): StatBreakdown {
   const skills = player.skills || {}
   const attributes = player.attributes || {}
-  const equipmentStats = player.calculatedStats || {}
   
   let base = 0
   let attributeBonus = 0
   let equipmentBonus = 0
+  let stoneBonus = 0
   let skillTreeBonus = 0
+  
+  // Calculate pure equipment stats (without stones)
+  let pureEquipmentStats: any = {}
+  let totalStoneStats: any = {}
+  
+  if (player.equipment) {
+    Object.values(player.equipment).forEach(equipment => {
+      if (equipment) {
+        // Add base equipment stats
+        Object.entries(equipment.baseStats).forEach(([stat, value]) => {
+          if (typeof value === 'number') {
+            pureEquipmentStats[stat] = (pureEquipmentStats[stat] || 0) + value
+          }
+        })
+        
+        // Add equipment affix stats
+        equipment.affixes.forEach(affix => {
+          pureEquipmentStats[affix.stat] = (pureEquipmentStats[affix.stat] || 0) + affix.value
+        })
+        
+        // Calculate stone stats separately
+        if (player.stones) {
+          const stoneStats = calculateStoneStats(equipment, player.stones)
+          Object.entries(stoneStats).forEach(([stat, value]) => {
+            if (typeof value === 'number') {
+              totalStoneStats[stat] = (totalStoneStats[stat] || 0) + value
+            }
+          })
+        }
+      }
+    })
+  }
 
   switch (statType) {
     case 'health':
@@ -46,9 +111,13 @@ export function calculateStatBreakdown(player: Player, statType: string): StatBr
       const vitBonusHP = Math.max(0, (attributes.vitality || 10) - 10) * 3
       attributeBonus = strBonusHP + vitBonusHP
       // Equipment bonuses: direct health + strength*2 + vitality*3
-      equipmentBonus = (equipmentStats.health || 0) + 
-                      (equipmentStats.strength || 0) * 2 + 
-                      (equipmentStats.vitality || 0) * 3
+      equipmentBonus = (pureEquipmentStats.health || 0) + 
+                      (pureEquipmentStats.strength || 0) * 2 + 
+                      (pureEquipmentStats.vitality || 0) * 3
+      // Stone bonuses: direct health + strength*2 + vitality*3
+      stoneBonus = (totalStoneStats.health || 0) + 
+                  (totalStoneStats.strength || 0) * 2 + 
+                  (totalStoneStats.vitality || 0) * 3
       skillTreeBonus = (skills.endurance || 0) * 10
       break
       
@@ -57,7 +126,9 @@ export function calculateStatBreakdown(player: Player, statType: string): StatBr
       // Intelligence bonus: +1 per point above 10
       attributeBonus = Math.max(0, (attributes.intelligence || 10) - 10)
       // Equipment bonuses: direct mana + intelligence
-      equipmentBonus = (equipmentStats.mana || 0) + (equipmentStats.intelligence || 0)
+      equipmentBonus = (pureEquipmentStats.mana || 0) + (pureEquipmentStats.intelligence || 0)
+      // Stone bonuses: direct mana + intelligence
+      stoneBonus = (totalStoneStats.mana || 0) + (totalStoneStats.intelligence || 0)
       skillTreeBonus = 0
       break
       
@@ -66,14 +137,17 @@ export function calculateStatBreakdown(player: Player, statType: string): StatBr
       // Strength bonus: +1 per point above 10
       attributeBonus = Math.max(0, (attributes.strength || 10) - 10)
       // Equipment bonuses: direct damage + strength from equipment
-      equipmentBonus = (equipmentStats.damage || 0) + (equipmentStats.strength || 0)
+      equipmentBonus = (pureEquipmentStats.damage || 0) + (pureEquipmentStats.strength || 0)
+      // Stone bonuses: direct damage + strength from stones
+      stoneBonus = (totalStoneStats.damage || 0) + (totalStoneStats.strength || 0)
       skillTreeBonus = (skills.strength || 0)
       break
       
     case 'armor':
       base = 0
       attributeBonus = 0
-      equipmentBonus = equipmentStats.armor || 0
+      equipmentBonus = pureEquipmentStats.armor || 0
+      stoneBonus = totalStoneStats.armor || 0
       skillTreeBonus = skills.resilience || 0
       break
       
@@ -84,9 +158,13 @@ export function calculateStatBreakdown(player: Player, statType: string): StatBr
       const luckBonusCrit = Math.max(0, (attributes.luck || 5) - 5) * 0.5
       attributeBonus = dexBonusCrit + luckBonusCrit
       // Equipment bonuses: direct critChance + dexterity*0.5% + luck*0.5%
-      equipmentBonus = ((equipmentStats.critChance || 0) * 100) + 
-                      ((equipmentStats.dexterity || 0) * 0.5) + 
-                      ((equipmentStats.luck || 0) * 0.5)
+      equipmentBonus = ((pureEquipmentStats.critChance || 0) * 100) + 
+                      ((pureEquipmentStats.dexterity || 0) * 0.5) + 
+                      ((pureEquipmentStats.luck || 0) * 0.5)
+      // Stone bonuses: direct critChance + dexterity*0.5% + luck*0.5%
+      stoneBonus = ((totalStoneStats.critChance || 0) * 100) + 
+                  ((totalStoneStats.dexterity || 0) * 0.5) + 
+                  ((totalStoneStats.luck || 0) * 0.5)
       skillTreeBonus = (skills.precision || 0) * 1 // 1% per level
       break
       
@@ -95,29 +173,35 @@ export function calculateStatBreakdown(player: Player, statType: string): StatBr
       // Dexterity: +0.3% per point above 10
       attributeBonus = Math.max(0, (attributes.dexterity || 10) - 10) * 0.3
       // Equipment bonuses: direct dodgeChance + dexterity*0.3%
-      equipmentBonus = ((equipmentStats.dodgeChance || 0) * 100) + 
-                      ((equipmentStats.dexterity || 0) * 0.3)
+      equipmentBonus = ((pureEquipmentStats.dodgeChance || 0) * 100) + 
+                      ((pureEquipmentStats.dexterity || 0) * 0.3)
+      // Stone bonuses: direct dodgeChance + dexterity*0.3%
+      stoneBonus = ((totalStoneStats.dodgeChance || 0) * 100) + 
+                  ((totalStoneStats.dexterity || 0) * 0.3)
       skillTreeBonus = (skills.agility || 0) * 1 // 1% per level
       break
       
     case 'blockChance':
       base = 0
       attributeBonus = 0
-      equipmentBonus = (equipmentStats.blockChance || 0) * 100
+      equipmentBonus = (pureEquipmentStats.blockChance || 0) * 100
+      stoneBonus = (totalStoneStats.blockChance || 0) * 100
       skillTreeBonus = 0
       break
       
     case 'lifeSteal':
       base = 0
       attributeBonus = 0
-      equipmentBonus = (equipmentStats.lifeSteal || 0) * 100
+      equipmentBonus = (pureEquipmentStats.lifeSteal || 0) * 100
+      stoneBonus = (totalStoneStats.lifeSteal || 0) * 100
       skillTreeBonus = 0
       break
       
     case 'attackSpeed':
       base = 1.0
       attributeBonus = 0
-      equipmentBonus = equipmentStats.attackSpeed || 0
+      equipmentBonus = pureEquipmentStats.attackSpeed || 0
+      stoneBonus = totalStoneStats.attackSpeed || 0
       skillTreeBonus = 0
       break
       
@@ -126,8 +210,11 @@ export function calculateStatBreakdown(player: Player, statType: string): StatBr
       // Vitality: +0.1 per point above 10
       attributeBonus = Math.max(0, (attributes.vitality || 10) - 10) * 0.1
       // Equipment bonuses: direct healthRegen + vitality*0.1
-      equipmentBonus = (equipmentStats.healthRegen || 0) + 
-                      ((equipmentStats.vitality || 0) * 0.1)
+      equipmentBonus = (pureEquipmentStats.healthRegen || 0) + 
+                      ((pureEquipmentStats.vitality || 0) * 0.1)
+      // Stone bonuses: direct healthRegen + vitality*0.1
+      stoneBonus = (totalStoneStats.healthRegen || 0) + 
+                  ((totalStoneStats.vitality || 0) * 0.1)
       skillTreeBonus = 0
       break
       
@@ -136,43 +223,223 @@ export function calculateStatBreakdown(player: Player, statType: string): StatBr
       // Intelligence: +0.2 per point above 10
       attributeBonus = Math.max(0, (attributes.intelligence || 10) - 10) * 0.2
       // Equipment bonuses: direct manaRegen + intelligence*0.2
-      equipmentBonus = (equipmentStats.manaRegen || 0) + 
-                      ((equipmentStats.intelligence || 0) * 0.2)
+      equipmentBonus = (pureEquipmentStats.manaRegen || 0) + 
+                      ((pureEquipmentStats.intelligence || 0) * 0.2)
+      // Stone bonuses: direct manaRegen + intelligence*0.2
+      stoneBonus = (totalStoneStats.manaRegen || 0) + 
+                  ((totalStoneStats.intelligence || 0) * 0.2)
       skillTreeBonus = 0
       break
       
     case 'strength':
       base = 10
       attributeBonus = Math.max(0, (attributes.strength || 10) - 10)
-      equipmentBonus = equipmentStats.strength || 0
+      equipmentBonus = pureEquipmentStats.strength || 0
+      stoneBonus = totalStoneStats.strength || 0
       skillTreeBonus = 0
       break
       
     case 'dexterity':
       base = 10
       attributeBonus = Math.max(0, (attributes.dexterity || 10) - 10)
-      equipmentBonus = equipmentStats.dexterity || 0
+      equipmentBonus = pureEquipmentStats.dexterity || 0
+      stoneBonus = totalStoneStats.dexterity || 0
       skillTreeBonus = 0
       break
       
     case 'intelligence':
       base = 10
       attributeBonus = Math.max(0, (attributes.intelligence || 10) - 10)
-      equipmentBonus = equipmentStats.intelligence || 0
+      equipmentBonus = pureEquipmentStats.intelligence || 0
+      stoneBonus = totalStoneStats.intelligence || 0
       skillTreeBonus = 0
       break
       
     case 'vitality':
       base = 10
       attributeBonus = Math.max(0, (attributes.vitality || 10) - 10)
-      equipmentBonus = equipmentStats.vitality || 0
+      equipmentBonus = pureEquipmentStats.vitality || 0
+      stoneBonus = totalStoneStats.vitality || 0
       skillTreeBonus = 0
       break
       
     case 'luck':
       base = 5
       attributeBonus = Math.max(0, (attributes.luck || 5) - 5)
-      equipmentBonus = equipmentStats.luck || 0
+      equipmentBonus = pureEquipmentStats.luck || 0
+      stoneBonus = totalStoneStats.luck || 0
+      skillTreeBonus = 0
+      break
+      
+    // Elemental Damage
+    case 'fireDamage':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = pureEquipmentStats.fireDamage || 0
+      stoneBonus = totalStoneStats.fireDamage || 0
+      skillTreeBonus = 0
+      break
+      
+    case 'iceDamage':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = pureEquipmentStats.iceDamage || 0
+      stoneBonus = totalStoneStats.iceDamage || 0
+      skillTreeBonus = 0
+      break
+      
+    case 'lightningDamage':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = pureEquipmentStats.lightningDamage || 0
+      stoneBonus = totalStoneStats.lightningDamage || 0
+      skillTreeBonus = 0
+      break
+      
+    case 'poisonDamage':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = pureEquipmentStats.poisonDamage || 0
+      stoneBonus = totalStoneStats.poisonDamage || 0
+      skillTreeBonus = 0
+      break
+      
+    // Elemental Resistances
+    case 'fireResistance':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.fireResistance || 0) * 100
+      stoneBonus = (totalStoneStats.fireResistance || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    case 'iceResistance':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.iceResistance || 0) * 100
+      stoneBonus = (totalStoneStats.iceResistance || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    case 'lightningResistance':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.lightningResistance || 0) * 100
+      stoneBonus = (totalStoneStats.lightningResistance || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    case 'poisonResistance':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.poisonResistance || 0) * 100
+      stoneBonus = (totalStoneStats.poisonResistance || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    // Advanced Combat Stats
+    case 'armorPenetration':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.armorPenetration || 0) * 100
+      stoneBonus = (totalStoneStats.armorPenetration || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    case 'damageMultiplier':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.damageMultiplier || 0) * 100
+      stoneBonus = (totalStoneStats.damageMultiplier || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    case 'stunChance':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.stunChance || 0) * 100
+      stoneBonus = (totalStoneStats.stunChance || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    case 'damageReduction':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.damageReduction || 0) * 100
+      stoneBonus = (totalStoneStats.damageReduction || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    case 'reflectDamage':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.reflectDamage || 0) * 100
+      stoneBonus = (totalStoneStats.reflectDamage || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    case 'movementSpeed':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.movementSpeed || 0) * 100
+      stoneBonus = (totalStoneStats.movementSpeed || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    // Special Effects
+    case 'doubleDropChance':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.doubleDropChance || 0) * 100
+      stoneBonus = (totalStoneStats.doubleDropChance || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    case 'cleaveChance':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.cleaveChance || 0) * 100
+      stoneBonus = (totalStoneStats.cleaveChance || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    case 'cooldownReduction':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.cooldownReduction || 0) * 100
+      stoneBonus = (totalStoneStats.cooldownReduction || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    case 'spellResistance':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.spellResistance || 0) * 100
+      stoneBonus = (totalStoneStats.spellResistance || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    case 'stunResistance':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.stunResistance || 0) * 100
+      stoneBonus = (totalStoneStats.stunResistance || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    case 'manaSteal':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = (pureEquipmentStats.manaSteal || 0) * 100
+      stoneBonus = (totalStoneStats.manaSteal || 0) * 100
+      skillTreeBonus = 0
+      break
+      
+    case 'thorns':
+      base = 0
+      attributeBonus = 0
+      equipmentBonus = pureEquipmentStats.thorns || 0
+      stoneBonus = totalStoneStats.thorns || 0
       skillTreeBonus = 0
       break
       
@@ -180,15 +447,17 @@ export function calculateStatBreakdown(player: Player, statType: string): StatBr
       base = 0
       attributeBonus = 0
       equipmentBonus = 0
+      stoneBonus = 0
       skillTreeBonus = 0
   }
 
-  const total = base + attributeBonus + equipmentBonus + skillTreeBonus
+  const total = base + attributeBonus + equipmentBonus + stoneBonus + skillTreeBonus
 
   return {
     base,
     attributeBonus,
     equipmentBonus,
+    stoneBonus,
     skillTreeBonus,
     total
   }
@@ -262,6 +531,15 @@ export const StatTooltip: React.FC<StatTooltipProps> = ({
             <span className="text-blue-300">Equipment:</span>
             <span className={getChangeColor(breakdown.equipmentBonus)}>
               +{formatValue(breakdown.equipmentBonus)}
+            </span>
+          </div>
+        )}
+        
+        {breakdown.stoneBonus !== 0 && (
+          <div className="flex justify-between">
+            <span className="text-orange-300">Stones:</span>
+            <span className={getChangeColor(breakdown.stoneBonus)}>
+              +{formatValue(breakdown.stoneBonus)}
             </span>
           </div>
         )}
