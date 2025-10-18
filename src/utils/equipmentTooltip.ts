@@ -2,8 +2,72 @@
 import { Equipment, EquipmentStats } from '../systems/equipment'
 import { Stone } from '../systems/stones'
 
-// Calculate total stats from socketed stones
-export function calculateStoneStats(equipment: Equipment, stones: Stone[]): EquipmentStats {
+// Equipment calculation cache
+interface EquipmentCache {
+  stoneStats: Map<string, { result: EquipmentStats; timestamp: number }>
+  totalStats: Map<string, { result: EquipmentStats; timestamp: number }>
+}
+
+const equipmentCache: EquipmentCache = {
+  stoneStats: new Map(),
+  totalStats: new Map()
+}
+
+const EQUIPMENT_CACHE_TTL = 30000 // 30 seconds cache TTL
+
+// Generate cache key for stone stats calculation
+function generateStoneStatsCacheKey(equipment: Equipment, stones: Stone[]): string {
+  const socketedStoneIds = equipment.sockets?.stones?.filter(id => id !== null) || []
+  const relevantStones = stones.filter(stone => socketedStoneIds.includes(stone.id))
+  return JSON.stringify({
+    equipmentId: equipment.id,
+    socketedStones: relevantStones.map(stone => ({
+      id: stone.id,
+      baseStats: stone.baseStats,
+      affixes: stone.affixes
+    }))
+  })
+}
+
+// Generate cache key for total equipment stats calculation
+function generateTotalStatsCacheKey(equipment: Equipment, stones: Stone[]): string {
+  return JSON.stringify({
+    equipmentId: equipment.id,
+    baseStats: equipment.baseStats,
+    affixes: equipment.affixes,
+    stoneKey: generateStoneStatsCacheKey(equipment, stones)
+  })
+}
+
+// Memoized version of calculateStoneStats
+function calculateStoneStatsMemoized(equipment: Equipment, stones: Stone[]): EquipmentStats {
+  const cacheKey = generateStoneStatsCacheKey(equipment, stones)
+  const now = Date.now()
+  
+  // Check cache
+  const cached = equipmentCache.stoneStats.get(cacheKey)
+  if (cached && (now - cached.timestamp) < EQUIPMENT_CACHE_TTL) {
+    return cached.result
+  }
+  
+  // Calculate and cache result
+  const result = calculateStoneStatsInternal(equipment, stones)
+  equipmentCache.stoneStats.set(cacheKey, { result, timestamp: now })
+  
+  // Clean old cache entries periodically
+  if (equipmentCache.stoneStats.size > 50) {
+    for (const [key, value] of equipmentCache.stoneStats.entries()) {
+      if ((now - value.timestamp) > EQUIPMENT_CACHE_TTL) {
+        equipmentCache.stoneStats.delete(key)
+      }
+    }
+  }
+  
+  return result
+}
+
+// Internal implementation of stone stats calculation
+function calculateStoneStatsInternal(equipment: Equipment, stones: Stone[]): EquipmentStats {
   const stoneStats: EquipmentStats = {}
   
   if (!equipment.sockets?.stones) {
@@ -48,8 +112,40 @@ export function calculateStoneStats(equipment: Equipment, stones: Stone[]): Equi
   return stoneStats
 }
 
-// Calculate total equipment stats including base, affixes, and stones
-export function calculateTotalEquipmentStats(equipment: Equipment, stones: Stone[]): EquipmentStats {
+// Calculate total stats from socketed stones (now uses memoized version)
+export function calculateStoneStats(equipment: Equipment, stones: Stone[]): EquipmentStats {
+  return calculateStoneStatsMemoized(equipment, stones)
+}
+
+// Memoized version of calculateTotalEquipmentStats
+function calculateTotalEquipmentStatsMemoized(equipment: Equipment, stones: Stone[]): EquipmentStats {
+  const cacheKey = generateTotalStatsCacheKey(equipment, stones)
+  const now = Date.now()
+  
+  // Check cache
+  const cached = equipmentCache.totalStats.get(cacheKey)
+  if (cached && (now - cached.timestamp) < EQUIPMENT_CACHE_TTL) {
+    return cached.result
+  }
+  
+  // Calculate and cache result
+  const result = calculateTotalEquipmentStatsInternal(equipment, stones)
+  equipmentCache.totalStats.set(cacheKey, { result, timestamp: now })
+  
+  // Clean old cache entries periodically
+  if (equipmentCache.totalStats.size > 50) {
+    for (const [key, value] of equipmentCache.totalStats.entries()) {
+      if ((now - value.timestamp) > EQUIPMENT_CACHE_TTL) {
+        equipmentCache.totalStats.delete(key)
+      }
+    }
+  }
+  
+  return result
+}
+
+// Internal implementation of total equipment stats calculation
+function calculateTotalEquipmentStatsInternal(equipment: Equipment, stones: Stone[]): EquipmentStats {
   const totalStats: EquipmentStats = {}
   
   // Add base stats
@@ -87,6 +183,11 @@ export function calculateTotalEquipmentStats(equipment: Equipment, stones: Stone
   })
   
   return totalStats
+}
+
+// Calculate total equipment stats including base, affixes, and stones (now uses memoized version)
+export function calculateTotalEquipmentStats(equipment: Equipment, stones: Stone[]): EquipmentStats {
+  return calculateTotalEquipmentStatsMemoized(equipment, stones)
 }
 
 // Format stat value for display
