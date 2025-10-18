@@ -4,7 +4,7 @@ import GameCanvas from './components/GameCanvas'
 import CharacterStatusPanel from './components/CharacterStatusPanel'
 import EquipmentPanel from './components/EquipmentPanel'
 import PassiveTreeBonusesPanel from './components/PassiveTreeBonusesPanel'
-import InventoryPanel from './components/InventoryPanel'
+import EnhancedInventoryPanel from './components/EnhancedInventoryPanel'
 import CombatLogPanel from './components/CombatLogPanel'
 import CombatPanel from './components/CombatPanel'
 import Modal from './components/Modal'
@@ -18,6 +18,7 @@ import PassiveTreeModal from './components/PassiveTreeModal'
 import EquipmentModal from './components/EquipmentModal'
 import { CharacterSelectionModal } from './components/CharacterSelectionModal'
 import StonePanel from './components/StonePanel'
+import UIShowcase from './components/UIShowcase'
 import { useGame } from './systems/gameContext'
 import './utils/performanceTest' // Import performance testing utilities
 
@@ -63,6 +64,8 @@ export default function App() {
           />
         case 'stones':
           return <StonePanel />
+        case 'ui-showcase':
+          return <UIShowcase />
         case 'log':
           return <CombatLogPanel />
       case 'maps':
@@ -90,7 +93,8 @@ export default function App() {
         return 'Character Selection'
       case 'stones':
         return 'Stone Management'
-
+      case 'ui-showcase':
+        return 'UI Enhancement Showcase'
       case 'log':
         return 'Combat Log'
       case 'maps':
@@ -213,6 +217,14 @@ export default function App() {
         </button>
       )}
 
+      {/* UI Showcase Button */}
+      <button
+        onClick={() => openModal('ui-showcase')}
+        className="fixed bottom-8 right-20 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-medium shadow-lg z-50 transition-all duration-200"
+      >
+        ✨ UI Showcase
+      </button>
+
       {/* Fireball Test Button */}
       <button
         onClick={() => openModal('fireball-test')}
@@ -235,7 +247,7 @@ export default function App() {
               </button>
             </div>
             <div className="flex-1 overflow-auto">
-              <InventoryPanel />
+              <EnhancedInventoryPanel />
             </div>
           </div>
         </div>

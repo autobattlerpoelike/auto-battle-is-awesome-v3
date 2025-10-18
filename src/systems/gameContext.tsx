@@ -40,7 +40,7 @@ import { Enemy, EnemyType, spawnEnemyForLevel } from './enemy'
 import { simulateCombatTick } from './combat'
 import { generateLoot } from './loot'
 import { loadSave, saveState } from './save'
-import { Equipment, EquipmentSlot } from './equipment'
+import { Equipment, EquipmentSlot, removeStone, embedStone } from './equipment'
 import { 
   unlockSkillGem, 
   unlockSupportGem, 
@@ -121,8 +121,11 @@ interface GameActions {
   simulateTick: (enemyId: string) => void
   removeEnemy: (id: string) => void
   equipItem: (id: string) => void
+  unequipItem: (slot: string) => void
   discardItem: (id: string) => void
+  sellItem: (id: string) => void
   sellAll: () => void
+  embedStone: (equipmentSlot: string, stoneId: string, socketIndex: number) => void
 
   resetAll: () => void
   log: (message: string) => void
@@ -150,6 +153,7 @@ interface GameActions {
   // Stone Management
   addStone: (stone: any) => void
   removeStone: (stoneId: string) => void
+  removeStoneFromSocket: (equipmentId: string, socketIndex: number) => void
   forceMigrateStones: () => void
   
   // Character Model Management
@@ -1557,8 +1561,24 @@ export function GameProvider({ children }: GameProviderProps) {
     simulateTick: (enemyId: string) => dispatch({ type: 'TICK', payload: { enemyId } }),
     removeEnemy: (id: string) => dispatch({ type: 'REMOVE', payload: id }),
     equipItem: (id: string) => dispatch({ type: 'EQUIP', payload: id }),
+    unequipItem: (slot: string) => dispatch({ type: 'UNEQUIP', payload: slot }),
     discardItem: (id: string) => dispatch({ type: 'DISCARD', payload: id }),
+    sellItem: (id: string) => dispatch({ type: 'DISCARD', payload: id }),
     sellAll: () => dispatch({ type: 'SELL_ALL' }),
+    embedStone: (equipmentSlot: string, stoneId: string, socketIndex: number) => {
+      const equipment = state.player.equipment[equipmentSlot as keyof typeof state.player.equipment]
+      if (!equipment) {
+        console.error('No equipment found in slot:', equipmentSlot)
+        return
+      }
+      
+      try {
+        const updatedEquipment = embedStone(equipment, stoneId, socketIndex)
+        dispatch({ type: 'UPDATE_EQUIPMENT', payload: { slot: equipmentSlot, equipment: updatedEquipment } })
+      } catch (error) {
+        console.error('Failed to embed stone:', error)
+      }
+    },
 
     resetAll: () => dispatch({ type: 'RESET' }),
     log: (message: string) => dispatch({ type: 'LOG', payload: message }),
@@ -1584,6 +1604,14 @@ export function GameProvider({ children }: GameProviderProps) {
     // Stone Management
     addStone: (stone: any) => dispatch({ type: 'ADD_STONE', payload: stone }),
     removeStone: (stoneId: string) => dispatch({ type: 'REMOVE_STONE', payload: stoneId }),
+    removeStoneFromSocket: (equipmentId: string, socketIndex: number) => {
+      // Find the equipment and remove the stone from the socket
+      const equipment = state.player.equipment[equipmentId as keyof typeof state.player.equipment]
+      if (equipment && equipment.sockets) {
+        const { equipment: updatedEquipment } = removeStone(equipment, socketIndex)
+        dispatch({ type: 'UPDATE_EQUIPMENT', payload: { slot: equipmentId, equipment: updatedEquipment } })
+      }
+    },
     forceMigrateStones: () => dispatch({ type: 'FORCE_MIGRATE_STONES' }),
     
     // Character Model Management

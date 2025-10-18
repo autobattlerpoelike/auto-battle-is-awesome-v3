@@ -26,6 +26,9 @@ export interface Stone {
   affixes: StoneAffix[]
   socketTypes: string[] // Which equipment slots this stone can be socketed into
   value: number
+  // Optional embedding information
+  equipmentId?: string
+  socketIndex?: number
 }
 
 export interface SocketedEquipment {

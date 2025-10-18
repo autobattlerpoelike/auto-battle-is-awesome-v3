@@ -3,6 +3,10 @@ import { useGame } from '../systems/gameContext'
 import { generateStone } from '../systems/stoneGenerator'
 import { getStoneColor, getStoneIcon, STONE_BASES, StoneType, StoneRarity } from '../systems/stones'
 import { embedStone, removeStone, hasAvailableSocket } from '../systems/equipment'
+import { DragDropProvider, DraggableStone, Draggable } from './DragDropSystem'
+import { EnhancedTooltip } from './EnhancedTooltip'
+import { SmartFilterSystem } from './SmartFilterSystem'
+import { DESIGN_TOKENS, getColor } from '../utils/designTokens'
 
 // Stone Tooltip component for detailed information
 const StoneTooltip = memo(({ stone, position, onClose, isPersistent }: {
@@ -543,11 +547,57 @@ const StonePanel = memo(function StonePanel() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-900 text-white">
+    <DragDropProvider
+      onDrop={(draggedItem, targetType, targetId) => {
+        if (draggedItem.type === 'stone' && targetType === 'socket') {
+          const [equipmentSlot, socketIndex] = targetId.split('-')
+          handleEmbedStone(equipmentSlot, draggedItem.id, parseInt(socketIndex))
+        }
+      }}
+      validateDrop={(draggedItem, targetType, targetId) => {
+        if (draggedItem.type === 'stone' && targetType === 'socket') {
+          const [equipmentSlot, socketIndex] = targetId.split('-')
+          const equipment = state.player.equipment[equipmentSlot as keyof typeof state.player.equipment]
+          return equipment ? hasAvailableSocket(equipment) : false
+        }
+        return false
+      }}
+    >
+      <div className="flex flex-col h-full bg-gray-900 text-white">
       {/* Header */}
       <div className="flex justify-between items-center p-4 bg-gray-800/50 border-b border-gray-600">
-        <h2 className="text-2xl font-bold text-white">💎 Stone Management</h2>
-        <div className="flex gap-2">
+        <h2 className="text-2xl font-bold text-white">💎 Enhanced Stone Management</h2>
+        <div className="flex gap-2 items-center">
+          <SmartFilterSystem
+            items={sortedStones}
+            onFilterChange={(filtered) => {
+              // Update filtered stones state if needed
+            }}
+            filterGroups={[
+               {
+                 id: 'type',
+                 label: 'Stone Type',
+                 type: 'single',
+                 options: Object.keys(STONE_BASES).map(type => ({ 
+                   id: type, 
+                   label: type, 
+                   value: type 
+                 }))
+               },
+               {
+                 id: 'rarity',
+                 label: 'Rarity',
+                 type: 'single',
+                 options: [
+                   { id: 'common', label: 'Common', value: 'common' },
+                   { id: 'uncommon', label: 'Uncommon', value: 'uncommon' },
+                   { id: 'rare', label: 'Rare', value: 'rare' },
+                   { id: 'epic', label: 'Epic', value: 'epic' },
+                   { id: 'legendary', label: 'Legendary', value: 'legendary' }
+                 ]
+               }
+             ]}
+          />
           <button
             onClick={() => handleViewModeChange('list')}
             className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -652,18 +702,24 @@ const StonePanel = memo(function StonePanel() {
               </div>
             )}
             {paginationData.currentItems.map((stone) => (
-              <StoneItem
-                key={stone.id}
-                stone={stone}
-                viewMode={viewMode}
-                onEmbed={handleStoneEmbed}
-                onRemove={handleStoneRemove}
-                isSelected={selectedStone === stone.id}
-                onHover={handleStoneHover}
-                onLeave={handleStoneLeave}
-                onClick={handleStoneClick}
-              />
-            ))}
+                 <Draggable
+                   key={stone.id}
+                   item={stone}
+                   type="stone"
+                   className={`transition-all ${selectedStone === stone.id ? 'ring-2 ring-blue-500' : ''}`}
+                 >
+                   <StoneItem
+                     stone={stone}
+                     viewMode={viewMode}
+                     onEmbed={handleStoneEmbed}
+                     onRemove={handleStoneRemove}
+                     onHover={handleStoneHover}
+                     onLeave={handleStoneLeave}
+                     onClick={handleStoneClick}
+                     isSelected={selectedStone === stone.id}
+                   />
+                 </Draggable>
+               ))}
           </div>
           
           {/* Pagination Controls */}
@@ -725,16 +781,26 @@ const StonePanel = memo(function StonePanel() {
         </div>
       </div>
       
-      {/* Tooltip */}
-      {tooltip && (
-        <StoneTooltip
-          stone={tooltip.stone}
-          position={tooltip.position}
-          onClose={handleTooltipClose}
-          isPersistent={tooltip.isPersistent}
-        />
-      )}
-    </div>
+      {/* Enhanced Tooltip */}
+       {tooltip && (
+         <div
+           style={{
+             position: 'fixed',
+             left: tooltip.position.x,
+             top: tooltip.position.y,
+             zIndex: 1000
+           }}
+         >
+           <EnhancedTooltip
+             type="stone"
+             item={tooltip.stone}
+           >
+             <div />
+           </EnhancedTooltip>
+         </div>
+       )}
+      </div>
+    </DragDropProvider>
   )
 })
 
