@@ -87,6 +87,7 @@ export function defaultPlayer(): Player {
   const skillBar = createDefaultSkillBar()
   
   return {
+    id: 'default_player',
     level: 10,
     xp: 0,
     nextLevelXp: 100,

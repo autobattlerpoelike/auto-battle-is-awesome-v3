@@ -206,7 +206,7 @@ const GameCanvas = React.memo(function GameCanvas() {
                 baseDamage: 10,
                 baseRange: 50
               },
-              rarity: 'normal' as const,
+              rarity: 'Normal' as const,
               quality: 0
             })
             
