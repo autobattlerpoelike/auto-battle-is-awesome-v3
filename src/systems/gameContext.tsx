@@ -117,6 +117,7 @@ type GameAction =
   | { type: 'UPDATE_EQUIPMENT'; payload: { slot: string; equipment: Equipment } }
   | { type: 'FORCE_MIGRATE_STONES' }
   | { type: 'UPDATE_CHARACTER_MODEL'; payload: string }
+  | { type: 'UPDATE_ENEMIES'; payload: Enemy[] }
 
 interface GameActions {
   spawnEnemy: (level?: number, kind?: EnemyType) => void
@@ -807,17 +808,15 @@ function reducer(state: GameState, action: GameAction): GameState {
         // Fireball targets nearest enemy
         const nearestEnemy = state.enemies.find(e => e.hp > 0)
         if (nearestEnemy) {
-          newLog.unshift(`ANIM_SKILL|fireball|${nearestEnemy.id}|${Date.now()}`)
           const damage = calculateSkillDamageWithStats(skill, updatedPlayer)
-          newLog.unshift(`ANIM_PLAYER|${nearestEnemy.id}|magic|Rare|hit|${damage}`)
+          newLog.unshift(`ANIM_SKILL|fireball|${nearestEnemy.id}|${damage}`)
         }
       } else if (skill.id === 'lightning_bolt') {
         // Lightning bolt targets nearest enemy
         const nearestEnemy = state.enemies.find(e => e.hp > 0)
         if (nearestEnemy) {
-          newLog.unshift(`ANIM_SKILL|lightning_bolt|${nearestEnemy.id}|${Date.now()}`)
           const damage = calculateSkillDamageWithStats(skill, updatedPlayer)
-          newLog.unshift(`ANIM_PLAYER|${nearestEnemy.id}|magic|Magic|hit|${damage}`)
+          newLog.unshift(`ANIM_SKILL|lightning_bolt|${nearestEnemy.id}|${damage}`)
         }
       } else if (skill.id === 'power_strike') {
         // Power strike targets nearest enemy
@@ -830,9 +829,8 @@ function reducer(state: GameState, action: GameAction): GameState {
         // Ice shard targets nearest enemy
         const nearestEnemy = state.enemies.find(e => e.hp > 0)
         if (nearestEnemy) {
-          newLog.unshift(`ANIM_SKILL|ice_shard|${nearestEnemy.id}|${Date.now()}`)
           const damage = calculateSkillDamageWithStats(skill, updatedPlayer)
-          newLog.unshift(`ANIM_PLAYER|${nearestEnemy.id}|magic|Magic|hit|${damage}`)
+          newLog.unshift(`ANIM_SKILL|ice_shard|${nearestEnemy.id}|${damage}`)
         }
       } else if (skill.id === 'ground_slam') {
         // Ground slam hits all nearby enemies
@@ -847,9 +845,8 @@ function reducer(state: GameState, action: GameAction): GameState {
         // Poison arrow targets nearest enemy
         const nearestEnemy = state.enemies.find(e => e.hp > 0)
         if (nearestEnemy) {
-          newLog.unshift(`ANIM_SKILL|poison_arrow|${nearestEnemy.id}|${Date.now()}`)
           const damage = calculateSkillDamageWithStats(skill, updatedPlayer)
-          newLog.unshift(`ANIM_PLAYER|${nearestEnemy.id}|ranged|Magic|hit|${damage}`)
+          newLog.unshift(`ANIM_SKILL|poison_arrow|${nearestEnemy.id}|${damage}`)
         }
       } else if (skill.id === 'chain_lightning') {
         // Chain lightning hits multiple enemies
@@ -933,6 +930,13 @@ function reducer(state: GameState, action: GameAction): GameState {
         ...state, 
         player: calculatePlayerStatsMemoized(updatedPlayer),
         lastStatsUpdate: Date.now()
+      }
+    }
+    
+    case 'UPDATE_ENEMIES': {
+      return {
+        ...state,
+        enemies: action.payload
       }
     }
     
@@ -1166,9 +1170,9 @@ function reducer(state: GameState, action: GameAction): GameState {
           
           const lastUsed = updatedPlayer.skillCooldowns?.[skill.id] ?? 0
           const cooldownTime = skill.scaling?.baseCooldown ?? skill.cooldown ?? 0 // Use actual cooldown, default to 0
+          const manaCost = skill.scaling?.baseManaCost || skill.manaCost || 0
           
           // Check if skill is off cooldown and player has enough mana
-          const manaCost = skill.scaling?.baseManaCost || skill.manaCost || 0
           console.log(`🔍 Skill ${skill.id} check details:`, {
             lastUsed,
             currentTime,
@@ -1227,17 +1231,12 @@ function reducer(state: GameState, action: GameAction): GameState {
             
             // Add skill animation log with target information for projectile skills
             if (projectileSkills.includes(skill.id) && nearestEnemy) {
-              const animLog = `ANIM_SKILL|${skill.id}|${nearestEnemy.id}`
+              const animLog = `ANIM_SKILL|${skill.id}|${nearestEnemy.id}|${damage}`
               console.log(`📝 Adding projectile animation log: ${animLog}`)
               skillLog.push(animLog)
               
-              // Apply damage to the target and add damage animation
-              const targetIndex = enemies.findIndex(e => e.id === nearestEnemy.id)
-              if (targetIndex !== -1 && enemies[targetIndex].hp > 0) {
-                enemies[targetIndex].hp = Math.max(0, enemies[targetIndex].hp - damage)
-                skillLog.push(`ANIM_PLAYER|${nearestEnemy.id}|magic|Rare|hit|${damage}`)
-                skillLog.push(`⚡ ${skill.name} hits ${nearestEnemy.name} for ${damage} damage!`)
-              }
+              // Note: Damage will be applied when projectile actually hits the target
+              console.log(`🎯 Projectile ${skill.id} created with ${damage} damage for target ${nearestEnemy.name}`)
             } else {
               const animLog = `ANIM_SKILL|${skill.id}|${currentTime}|${skill.scaling?.baseDuration ?? 1000}`
 
@@ -1263,7 +1262,7 @@ function reducer(state: GameState, action: GameAction): GameState {
                     
                     // Only damage enemies within skill range
                     if (distance <= skillRange) {
-                      enemies[index].hp = Math.max(0, enemies[index].hp - damage)
+                      enemies[index].hp = Math.max(0, enemies[index].hp - (damage || 0))
                       enemiesHit++
                     }
                   } else {
@@ -1274,20 +1273,20 @@ function reducer(state: GameState, action: GameAction): GameState {
               })
               
               if (enemiesHit > 0) {
-                skillLog.push(`⚡ ${skill.name} hits ${enemiesHit} enemies for ${damage} damage each!`)
+                skillLog.push(`⚡ ${skill.name} hits ${enemiesHit} enemies for ${damage || 0} damage each!`)
               }
             }
             
             console.log(`📋 Current skillLog after adding ${skill.id}:`, skillLog)
           } else {
-            const reason = !nearestEnemy ? 'no target' : `cooldown: ${currentTime - lastUsed}/${cooldownTime}, mana: ${updatedPlayer.mana}/${manaCost}`
+            const reason = !nearestEnemy ? 'no target' : `cooldown: ${currentTime - (updatedPlayer.skillCooldowns?.[skill.id] || 0)}/${skill?.cooldown || 0}, mana: ${updatedPlayer.mana}/${manaCost}`
             console.log(`❌ Skill ${skill.id} not ready - ${reason}`)
           }
         }
       }
       
       // Check if any enemies were defeated by skills and award loot/experience
-      const defeatedEnemies = enemies.filter(e => e.hp <= 0)
+      const defeatedEnemies = state.enemies.filter(e => e.hp <= 0)
       let newInventory = [...state.inventory]
       
       if (defeatedEnemies.length > 0) {
@@ -1387,6 +1386,7 @@ function reducer(state: GameState, action: GameAction): GameState {
     }
     
     case 'MANA_REGEN': {
+
       const updatedPlayer = { ...state.player }
       const manaRegenPerSecond = updatedPlayer.manaRegen || 0
       
@@ -1430,7 +1430,7 @@ function reducer(state: GameState, action: GameAction): GameState {
     }
     
     case 'ADD_STONE': {
-      const stone = action.payload
+      const stone = (action as { type: 'ADD_STONE'; payload: any }).payload
       const updatedPlayer = {
         ...state.player,
         stones: [...state.player.stones, stone]
@@ -1451,6 +1451,7 @@ function reducer(state: GameState, action: GameAction): GameState {
     }
     
     case 'FORCE_MIGRATE_STONES': {
+
       const stonesCopy = [...state.player.stones]
       forceMigrateAllStones(stonesCopy)
       

@@ -35,6 +35,9 @@ interface Projectile {
   homing?: boolean // Add homing behavior
   targetX?: number // Add target X coordinate for homing
   targetY?: number // Add target Y coordinate for homing
+  damage?: number // Add damage information
+  skillId?: string // Add skill ID for proper damage calculation
+  playerId?: string // Add player ID for damage attribution
 }
 
 interface Effect {
@@ -182,7 +185,30 @@ const GameCanvas = React.memo(function GameCanvas() {
           if (e.type === 'training_dummy') {
             // Calculate North indicator position in world coordinates
             // North indicator is positioned at basic attack range north of player
-            const basicAttackRange = getScaledRange(state.player.basicAttackRange || 120, state.player)
+            const basicAttackRange = getScaledRange({ 
+              id: 'basic_attack',
+              name: 'Basic Attack',
+              description: 'A simple melee attack',
+              type: 'active' as const,
+              category: 'attack',
+              tags: ['Attack', 'Melee'],
+              level: 1,
+              maxLevel: 1,
+              unlockLevel: 0,
+              skillPointCost: 0,
+              manaCost: 0,
+              cooldown: 1000,
+              isUnlocked: true,
+              isEquipped: false,
+              supportGems: [],
+              icon: 'basic_attack',
+              scaling: {
+                baseDamage: 10,
+                baseRange: 50
+              },
+              rarity: 'normal' as const,
+              quality: 0
+            })
             
             // North is negative Y direction in world coordinates
             const northWorldX = playerPos.x
@@ -510,8 +536,9 @@ const GameCanvas = React.memo(function GameCanvas() {
           }])
         } else if (skillType === 'fireball') {
           const targetId = parts[2]
+          const damage = Number(parts[3]) || 0
           const targetPos = enemyPositions[targetId]
-          console.log(`🔥 FIREBALL ANIM_SKILL received - targetId: ${targetId}, targetPos:`, targetPos)
+          console.log(`🔥 FIREBALL ANIM_SKILL received - targetId: ${targetId}, damage: ${damage}, targetPos:`, targetPos)
           if (targetPos) {
             // Create enhanced fireball projectile with advanced visual effects
             const dirx = targetPos.x - playerPos.x, diry = targetPos.y - playerPos.y, d = Math.hypot(dirx,diry)||1
@@ -558,7 +585,10 @@ const GameCanvas = React.memo(function GameCanvas() {
                 trail: false,
                 particles: false,
                 rotation: 0,
-                targetId: targetId
+                targetId: targetId,
+                damage: damage,
+                skillId: 'fireball',
+                playerId: state.player.id || 'player'
               }
               console.log(`🔥 Creating fireball projectile with life: ${newProjectile.life}ms, target: ${targetId}`)
               // Add to both state and animation ref to avoid race conditions
@@ -573,6 +603,7 @@ const GameCanvas = React.memo(function GameCanvas() {
           }
          } else if (skillType === 'lightning_bolt') {
            const targetId = parts[2]
+           const damage = Number(parts[3]) || 0
            const targetPos = enemyPositions[targetId]
            if (targetPos) {
              // Create traveling lightning bolt projectile
@@ -594,7 +625,12 @@ const GameCanvas = React.memo(function GameCanvas() {
                color: '#00aaff', 
                radius: 6, 
                size: 4, 
-               glow: true 
+               glow: true,
+               type: 'lightning_bolt',
+               targetId: targetId,
+               damage: damage,
+               skillId: 'lightning_bolt',
+               playerId: 'player'
              }])
            }
          } else if (skillType === 'power_strike') {
@@ -609,6 +645,7 @@ const GameCanvas = React.memo(function GameCanvas() {
            }])
          } else if (skillType === 'ice_shard') {
            const targetId = parts[2]
+           const damage = Number(parts[3]) || 0
            const targetPos = enemyPositions[targetId]
            if (targetPos) {
              // Create traveling ice shard projectile
@@ -630,7 +667,12 @@ const GameCanvas = React.memo(function GameCanvas() {
                 color: '#74c0fc', 
                 radius: 5, 
                 size: 3, 
-                glow: true 
+                glow: true,
+                type: 'ice_shard',
+                targetId: targetId,
+                damage: damage,
+                skillId: 'ice_shard',
+                playerId: state.player.id || 'player'
               }])
             }
           } else if (skillType === 'ground_slam') {
@@ -645,6 +687,7 @@ const GameCanvas = React.memo(function GameCanvas() {
             }])
           } else if (skillType === 'poison_arrow') {
             const targetId = parts[2]
+            const damage = Number(parts[3]) || 0
             const targetPos = enemyPositions[targetId]
             if (targetPos) {
               // Create traveling poison arrow projectile
@@ -659,7 +702,12 @@ const GameCanvas = React.memo(function GameCanvas() {
                 color: '#51cf66', 
                 radius: 4, 
                 size: 3, 
-                glow: false 
+                glow: false,
+                type: 'poison_arrow',
+                targetId: targetId,
+                damage: damage,
+                skillId: 'poison_arrow',
+                playerId: state.player.id || 'player'
               }])
             }
           } else if (skillType === 'chain_lightning') {
@@ -1296,6 +1344,33 @@ const GameCanvas = React.memo(function GameCanvas() {
             }
             
             if (checkCollision({x: p.x, y: p.y}, enemyPos, p.radius, enemyRadius)) {
+              // Apply damage if projectile has damage information
+              if (p.damage && p.damage > 0) {
+                console.log(`💥 Projectile ${p.skillId} hits ${e.name} for ${p.damage} damage!`)
+                
+                // Apply damage to enemy through game context
+                actions.log(`ANIM_PLAYER|${e.id}|magic|Rare|hit|${p.damage}`)
+                actions.log(`⚡ ${p.skillId} hits ${e.name} for ${p.damage} damage!`)
+                
+                // Apply damage directly to enemy
+                const targetIndex = state.enemies.findIndex(enemy => enemy.id === e.id)
+                if (targetIndex !== -1 && state.enemies[targetIndex].hp > 0) {
+                  // Create a copy of enemies array and update the specific enemy
+                  const updatedEnemies = [...state.enemies]
+                  updatedEnemies[targetIndex] = {
+                    ...updatedEnemies[targetIndex],
+                    hp: Math.max(0, updatedEnemies[targetIndex].hp - p.damage)
+                  }
+                  
+                  // Update the game state with new enemy HP
+                  const enemyRecord: Record<string, { x: number; y: number }> = {}
+                  updatedEnemies.forEach(enemy => {
+                    enemyRecord[enemy.id] = { x: enemy.position?.x || 0, y: enemy.position?.y || 0 }
+                  })
+                  actions.updateEnemyPositions(enemyRecord)
+                }
+              }
+              
               // Create enhanced impact effect based on projectile type
               if (p.type === 'fireball') {
                 // Fireball explosion effect - significantly longer duration

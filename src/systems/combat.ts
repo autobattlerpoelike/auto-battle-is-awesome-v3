@@ -18,6 +18,32 @@ export type CombatResult = {
   enemyDamage: number
   damageType: DamageType
   statusEffect?: string
+  armorPenetration?: number
+  damageReduction?: number
+  effectiveCritChance?: number
+  effectiveCritMultiplier?: number
+}
+
+// Advanced damage calculation interface
+export interface DamageCalculation {
+  baseDamage: number
+  attributeBonus: number
+  elementalBonus: number
+  criticalMultiplier: number
+  armorPenetration: number
+  finalDamage: number
+  isCritical: boolean
+  damageType: DamageType
+}
+
+// Defense calculation interface
+export interface DefenseCalculation {
+  baseArmor: number
+  effectiveArmor: number
+  damageReduction: number
+  blockChance: number
+  dodgeChance: number
+  finalDamageReduction: number
 }
 
 function rarityCritChance(rarity: string): number {
@@ -94,6 +120,173 @@ function getEnemyDodgeChance(enemy: Enemy): number {
   return baseDodge + levelBonus
 }
 
+// Advanced damage calculation system
+export function calculateAdvancedDamage(player: Player, damageType: DamageType): DamageCalculation {
+  // Base damage calculation with improved scaling
+  let baseDamage = Math.max(1, Math.floor(player.dps || 1))
+  
+  // Add weapon base damage from equipment stats
+  if (player.calculatedStats?.damage) {
+    baseDamage += player.calculatedStats.damage
+  }
+  
+  // Advanced attribute bonuses with diminishing returns
+  let attributeBonus = 0
+  if (player.attributes) {
+    const str = player.attributes.strength || 0
+    const int = player.attributes.intelligence || 0
+    const dex = player.attributes.dexterity || 0
+    const luck = player.attributes.luck || 0
+    
+    // Strength: Physical damage with diminishing returns
+    if (damageType === 'physical') {
+      attributeBonus += Math.floor(str * 0.6 + Math.sqrt(str) * 0.4)
+    }
+    
+    // Intelligence: Elemental damage with scaling
+    if (damageType !== 'physical') {
+      attributeBonus += Math.floor(int * 0.8 + Math.sqrt(int) * 0.6)
+    }
+    
+    // Dexterity: Universal damage bonus
+    attributeBonus += Math.floor(dex * 0.4 + Math.sqrt(dex) * 0.2)
+    
+    // Luck: Small damage bonus with high scaling
+    attributeBonus += Math.floor(luck * 0.2 + Math.sqrt(luck) * 0.3)
+  }
+  
+  // Elemental damage bonuses with type-specific scaling
+  let elementalBonus = 0
+  if (player.calculatedStats) {
+    switch (damageType) {
+      case 'fire':
+        elementalBonus = (player.calculatedStats.fireDamage || 0) * 1.1
+        break
+      case 'ice':
+        elementalBonus = (player.calculatedStats.iceDamage || 0) * 1.0
+        break
+      case 'lightning':
+        elementalBonus = (player.calculatedStats.lightningDamage || 0) * 1.2
+        break
+      case 'poison':
+        elementalBonus = (player.calculatedStats.poisonDamage || 0) * 0.9
+        break
+    }
+  }
+  
+  // Calculate critical hit chance with advanced formula
+  let critChance = player.calculatedStats?.critChance || 0.05
+  
+  // Legacy equipment crit bonus
+  if (player.equipped?.rarity) {
+    critChance += rarityCritChance(player.equipped.rarity)
+  }
+  
+  // Advanced attribute-based crit scaling
+  if (player.attributes) {
+    const dex = player.attributes.dexterity || 0
+    const luck = player.attributes.luck || 0
+    
+    // Dexterity: Linear scaling with cap
+    critChance += Math.min(0.25, dex * 0.003)
+    
+    // Luck: Exponential scaling for high investment
+    critChance += Math.min(0.35, luck * 0.002 + Math.sqrt(luck) * 0.001)
+  }
+  
+  // Damage type specific crit bonuses
+  if (damageType === 'lightning') critChance += 0.08
+  if (damageType === 'ice') critChance += 0.03
+  
+  // Calculate critical multiplier with advanced scaling
+  let critMultiplier = 1.8
+  if (player.calculatedStats?.critMultiplier) {
+    critMultiplier += player.calculatedStats.critMultiplier
+  }
+  
+  // Luck increases crit damage with diminishing returns
+  if (player.attributes?.luck) {
+    const luck = player.attributes.luck
+    critMultiplier += Math.min(1.0, luck * 0.015 + Math.sqrt(luck) * 0.01)
+  }
+  
+  // Determine if critical hit occurs
+  const isCritical = Math.random() < critChance
+  
+  // Calculate armor penetration
+  const armorPenetration = player.calculatedStats?.armorPenetration || 0
+  
+  // Apply damage multiplier from equipment
+  let totalDamage = baseDamage + attributeBonus + elementalBonus
+  if (player.calculatedStats?.damageMultiplier) {
+    totalDamage = Math.floor(totalDamage * (1 + player.calculatedStats.damageMultiplier))
+  }
+  
+  // Apply variance
+  totalDamage = calculateDamageVariance(totalDamage)
+  
+  // Apply critical hit
+  const finalDamage = isCritical ? Math.floor(totalDamage * critMultiplier) : totalDamage
+  
+  return {
+    baseDamage,
+    attributeBonus,
+    elementalBonus,
+    criticalMultiplier: isCritical ? critMultiplier : 1.0,
+    armorPenetration,
+    finalDamage,
+    isCritical,
+    damageType
+  }
+}
+
+// Advanced defense calculation system
+export function calculateAdvancedDefense(player: Player, incomingDamage: number): DefenseCalculation {
+  const baseArmor = player.calculatedStats?.armor || 0
+  
+  // Calculate dodge chance with advanced formula
+  let dodgeChance = (player.calculatedStats?.dodgeChance || 0) + (player.skills?.agility || 0) * 0.01
+  
+  // Legacy equipment dodge bonus
+  if (player.equipped?.rarity) {
+    dodgeChance += rarityDodgeChance(player.equipped.rarity)
+  }
+  
+  // Attribute-based dodge scaling
+  if (player.attributes?.dexterity) {
+    const dex = player.attributes.dexterity
+    dodgeChance += Math.min(0.3, dex * 0.002 + Math.sqrt(dex) * 0.001)
+  }
+  
+  // Calculate block chance
+  const blockChance = player.calculatedStats?.blockChance || 0
+  
+  // Advanced armor calculation with diminishing returns
+  const armorEfficiency = Math.min(0.85, baseArmor * 0.012 + Math.sqrt(baseArmor) * 0.008)
+  const effectiveArmor = baseArmor
+  
+  // Calculate damage reduction from equipment
+  let damageReduction = player.calculatedStats?.damageReduction || 0
+  
+  // Vitality-based damage reduction with scaling
+  if (player.attributes?.vitality) {
+    const vit = player.attributes.vitality
+    damageReduction += Math.min(0.4, vit * 0.006 + Math.sqrt(vit) * 0.004)
+  }
+  
+  // Combine armor and damage reduction
+  const finalDamageReduction = Math.min(0.9, armorEfficiency + damageReduction)
+  
+  return {
+    baseArmor,
+    effectiveArmor,
+    damageReduction,
+    blockChance,
+    dodgeChance,
+    finalDamageReduction
+  }
+}
+
 export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
   const p = {...player}
   const e = {...enemy}
@@ -135,87 +328,13 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
   }
   
   if (didPlayerHit) {
-    // Calculate player damage using enhanced system with all modifiers
-    let baseDmg = Math.max(1, Math.floor(p.dps || 1))
-    console.log(`Combat: Player DPS = ${p.dps}, Base damage = ${baseDmg}`)
+    // Use new advanced damage calculation system
+    const damageCalc = calculateAdvancedDamage(p, damageType)
     
-    // Add weapon base damage from equipment stats
-    if (p.calculatedStats?.damage) {
-      baseDmg += p.calculatedStats.damage
-    }
+    damage = damageCalc.finalDamage
+    crit = damageCalc.isCritical
     
-    // Add attribute bonuses
-    if (p.attributes) {
-      // Strength increases physical damage
-      if (damageType === 'physical') {
-        baseDmg += Math.floor((p.attributes.strength || 0) * 0.5)
-      }
-      // Intelligence increases elemental damage
-      if (damageType !== 'physical') {
-        baseDmg += Math.floor((p.attributes.intelligence || 0) * 0.6)
-      }
-      // Dexterity increases all damage slightly
-      baseDmg += Math.floor((p.attributes.dexterity || 0) * 0.3)
-    }
-    
-    // Add elemental damage bonuses based on damage type from equipment stats
-    if (damageType === 'fire' && p.calculatedStats?.fireDamage) {
-      baseDmg += p.calculatedStats.fireDamage
-    } else if (damageType === 'ice' && p.calculatedStats?.iceDamage) {
-      baseDmg += p.calculatedStats.iceDamage
-    } else if (damageType === 'lightning' && p.calculatedStats?.lightningDamage) {
-      baseDmg += p.calculatedStats.lightningDamage
-    } else if (damageType === 'poison' && p.calculatedStats?.poisonDamage) {
-      baseDmg += p.calculatedStats.poisonDamage
-    }
-    
-    // Apply damage multiplier from equipment
-    if (p.calculatedStats?.damageMultiplier) {
-      baseDmg = Math.floor(baseDmg * (1 + p.calculatedStats.damageMultiplier))
-    }
-    
-    const varianceDamage = calculateDamageVariance(baseDmg)
-    
-    // Calculate critical hit chance with all modifiers
-    let critChance = p.calculatedStats?.critChance || 0.05
-    
-    // Legacy equipment crit bonus
-    if (p.equipped?.rarity) {
-      critChance += rarityCritChance(p.equipped.rarity)
-    }
-    
-    // Dexterity increases crit chance
-    if (p.attributes?.dexterity) {
-      critChance += ((p.attributes.dexterity || 0) * 0.002)
-    }
-    
-    // Lightning damage type bonus
-    if (damageType === 'lightning') critChance += 0.05
-    
-    // Luck increases crit chance
-    if (p.attributes?.luck) {
-      critChance += ((p.attributes.luck || 0) * 0.001)
-    }
-    
-    crit = Math.random() < critChance
-    
-    // Apply critical multiplier with equipment bonuses
-    let critMultiplier = 1.8
-    if (p.calculatedStats?.critMultiplier) {
-      critMultiplier += p.calculatedStats.critMultiplier
-    }
-    if (p.attributes?.luck) {
-      critMultiplier += ((p.attributes.luck || 0) * 0.01) // Luck increases crit damage
-    }
-    
-    damage = crit ? Math.floor(varianceDamage * critMultiplier) : varianceDamage
-    
-    // Apply armor penetration
-    if (p.calculatedStats?.armorPenetration) {
-      // Armor penetration reduces enemy's effective armor
-      const effectiveEnemyArmor = Math.max(0, (e.armor || 0) * (1 - p.calculatedStats.armorPenetration))
-      // This will be used in damage reduction calculation later
-    }
+    console.log(`Combat: Advanced damage calculation - Base: ${damageCalc.baseDamage}, Final: ${damageCalc.finalDamage}, Crit: ${crit}`)
     
     // Apply elemental effects
     const elementalResult = applyElementalEffects(damage, damageType, e)
@@ -301,23 +420,13 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
         
         enemyDamage = calculateDamageVariance(baseDamage)
         
-        // Apply armor reduction with armor penetration consideration
-        const armor = p.calculatedStats?.armor || 0
-        const armorReduction = Math.min(0.8, armor * 0.01) // Max 80% damage reduction
-        enemyDamage = Math.floor(enemyDamage * (1 - armorReduction))
-        
-        // Apply damage reduction from equipment
-        if (p.calculatedStats?.damageReduction) {
-          enemyDamage = Math.floor(enemyDamage * (1 - p.calculatedStats.damageReduction))
-        }
-        
-        // Vitality reduces damage taken
-        if (p.attributes?.vitality) {
-          const vitalityReduction = Math.min(0.3, ((p.attributes.vitality || 0) * 0.005))
-          enemyDamage = Math.floor(enemyDamage * (1 - vitalityReduction))
-        }
+        // Use new advanced defense calculation system
+        const defenseCalc = calculateAdvancedDefense(p, enemyDamage)
+        enemyDamage = Math.floor(enemyDamage * (1 - defenseCalc.finalDamageReduction))
         
         enemyDamage = Math.max(1, enemyDamage) // Minimum 1 damage
+        
+        console.log(`Combat: Advanced defense calculation - Incoming: ${baseDamage}, Final reduction: ${defenseCalc.finalDamageReduction}, Final damage: ${enemyDamage}`)
         
         // Apply thorns damage to enemy before taking damage
         if (p.calculatedStats?.thorns && p.calculatedStats.thorns > 0) {
@@ -344,6 +453,24 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
     }
   }
 
+  // Calculate advanced stats for result
+  let armorPenetration = 0
+  let damageReduction = 0
+  let effectiveCritChance = 0
+  let effectiveCritMultiplier = 0
+  
+  if (didPlayerHit) {
+    const damageCalc = calculateAdvancedDamage(p, damageType)
+    armorPenetration = damageCalc.armorPenetration
+    effectiveCritChance = damageCalc.isCritical ? 1 : 0 // Simplified for result
+    effectiveCritMultiplier = damageCalc.criticalMultiplier
+  }
+  
+  if (didEnemyHit && !playerDodged) {
+    const defenseCalc = calculateAdvancedDefense(p, enemyDamage)
+    damageReduction = defenseCalc.finalDamageReduction
+  }
+
   return { 
     player: p, 
     enemy: e, 
@@ -357,6 +484,10 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
     damage,
     enemyDamage,
     damageType,
-    statusEffect
+    statusEffect,
+    armorPenetration,
+    damageReduction,
+    effectiveCritChance,
+    effectiveCritMultiplier
   }
 }

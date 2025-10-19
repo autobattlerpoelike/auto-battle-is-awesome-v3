@@ -6,6 +6,7 @@ import { Stone } from './stones'
 import { calculateStoneStats } from '../utils/equipmentTooltip'
 
 export type Player = {
+  id: string
   level: number
   xp: number
   nextLevelXp: number
