@@ -1,6 +1,7 @@
 import { Player } from './player'
 import { Enemy } from './enemy'
 import { EquipmentStats } from './equipment'
+import { processAdvancedEnemyAbilities } from './advancedEnemyAbilities'
 
 export type DamageType = 'physical' | 'fire' | 'ice' | 'lightning' | 'poison'
 
@@ -312,6 +313,7 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
   let enemyDamage = 0
   let crit = false
   let statusEffect: string | undefined
+  let abilityMessage = ''
   
   // Check if enemy dodges player attack
   if (Math.random() < enemyDodgeChance) {
@@ -364,6 +366,15 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
     }
     
     e.hp -= damage
+    
+    // Process advanced enemy abilities after taking damage
+    const abilityResult = processAdvancedEnemyAbilities(e, p, damage, damageType)
+    if (abilityResult.message) {
+      abilityMessage = abilityResult.message
+    }
+    if (abilityResult.statusEffect) {
+      statusEffect = statusEffect ? `${statusEffect}, ${abilityResult.statusEffect}` : abilityResult.statusEffect
+    }
   }
   
   let msg = ''
@@ -374,6 +385,11 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
     const elementText = damageType !== 'physical' ? ` [${damageType.toUpperCase()}]` : ''
     const statusText = statusEffect ? ` (${statusEffect})` : ''
     msg = `Player hits ${e.name} for ${damage}${elementText}${critText}${statusText}`
+    
+    // Add ability message if present
+    if (abilityMessage) {
+      msg += `. ${abilityMessage}`
+    }
   } else {
     msg = `${e.name} dodged player's attack!`
   }
@@ -413,6 +429,19 @@ export function simulateCombatTick(player: Player, enemy: Enemy): CombatResult {
               if (Math.random() < 0.15) {
                 baseDamage = Math.floor(baseDamage * 1.3)
                 msg += ` (PRECISE STRIKE!)`
+              }
+              break
+            case 'poison':
+              if (Math.random() < 0.2) {
+                statusEffect = statusEffect ? `${statusEffect}, poisoned` : 'poisoned'
+                msg += ` (POISON ATTACK!)`
+              }
+              break
+            case 'lightning':
+              if (Math.random() < 0.15) {
+                baseDamage = Math.floor(baseDamage * 1.2)
+                statusEffect = statusEffect ? `${statusEffect}, stunned` : 'stunned'
+                msg += ` (LIGHTNING STRIKE!)`
               }
               break
           }

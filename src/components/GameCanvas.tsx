@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react'
 import { useGame } from '../systems/gameContext'
 import { getScaledRange } from '../systems/skillGems'
+import { getEnemyTypeColor } from '../systems/enemy'
 
 const CANVAS_W = 1400, CANVAS_H = 700
 // Expanded world boundaries for seamless exploration
@@ -86,6 +87,23 @@ function rarityColor(r: string | undefined): string {
   if (r === 'Rare') return '#8b5cf6'
   if (r === 'Unique') return '#fbbf24'
   return '#ffffff'
+}
+
+// Helper function to calculate enemy radius consistently
+function getEnemyRadius(enemy: any): number {
+  if (enemy.isBoss) {
+    return 20 + enemy.level * 1.5;
+  } else if (enemy.type === 'melee' || enemy.type === 'assassin' || enemy.type === 'beast') {
+    return Math.max(1, 12 + enemy.level * 0.8 - 15);
+  } else if (enemy.type === 'ranged' || enemy.type === 'swarm') {
+    return Math.max(1, 10 + enemy.level * 0.6 - 15);
+  } else if (enemy.type === 'tank' || enemy.type === 'construct' || enemy.type === 'crystal_guardian') {
+    return Math.max(1, 16 + enemy.level * 1.2 - 15);
+  } else if (enemy.type === 'phase_beast') {
+    return Math.max(1, 11 + enemy.level * 0.7 - 15);
+  } else {
+    return Math.max(1, 14 + enemy.level * 1.0 - 15);
+  }
 }
 
 const GameCanvas = React.memo(function GameCanvas() {
@@ -332,7 +350,7 @@ const GameCanvas = React.memo(function GameCanvas() {
           const directionAngle = playerFacingAngle
           
           // Create slash effect with 20px separation from player model edge, facing forward
-          const playerRadius = 16 // Player model radius
+          const playerRadius = 20 // Player model radius (matches half of 40px size)
           const slashSeparation = 20 // 20px separation from player model edge
           const slashDistance = playerRadius + slashSeparation // Total distance: 36px
           const slashX = playerPos.x + Math.cos(directionAngle) * slashDistance
@@ -1064,14 +1082,7 @@ const GameCanvas = React.memo(function GameCanvas() {
               const enemyPos = enemyPositions[e.id]
               if (enemyPos && e.hp > 0) {
                 // Calculate enemy radius based on type and level
-                let enemyRadius = 12
-                if (e.type === 'melee') {
-                  enemyRadius = 12 + e.level * 0.8
-                } else if (e.type === 'ranged') {
-                  enemyRadius = 10 + e.level * 0.6
-                } else {
-                  enemyRadius = 14 + e.level * 1.0
-                }
+                const enemyRadius = getEnemyRadius(e)
                 
                 // Check collision with adjusted buffers
                 if (checkCollision(targetPos, enemyPos, collisionBuffer, enemyRadius + enemyBuffer)) {
@@ -1116,14 +1127,7 @@ const GameCanvas = React.memo(function GameCanvas() {
         state.enemies.forEach(e => {
           const enemyPos = enemyPositions[e.id]
           if (enemyPos && e.hp > 0) {
-            let enemyRadius = 12
-            if (e.type === 'melee') {
-              enemyRadius = 12 + e.level * 0.8
-            } else if (e.type === 'ranged') {
-              enemyRadius = 10 + e.level * 0.6
-            } else {
-              enemyRadius = 14 + e.level * 1.0
-            }
+            const enemyRadius = getEnemyRadius(e)
             
             if (checkCollision(playerControlledPos, enemyPos, 18, enemyRadius + 2)) {
               canMovePlayer = false
@@ -1151,14 +1155,7 @@ const GameCanvas = React.memo(function GameCanvas() {
         const enemyPos = enemyPositions[e.id]
         if (enemyPos && e.hp > 0) {
           // Calculate enemy radius
-          let enemyRadius = 12
-          if (e.type === 'melee') {
-            enemyRadius = 12 + e.level * 0.8
-          } else if (e.type === 'ranged') {
-            enemyRadius = 10 + e.level * 0.6
-          } else {
-            enemyRadius = 14 + e.level * 1.0
-          }
+          const enemyRadius = getEnemyRadius(e)
           
           // Check if player is overlapping with enemy
           const distance = dist(newPlayerPos, enemyPos)
@@ -1214,14 +1211,7 @@ const GameCanvas = React.memo(function GameCanvas() {
         const calculatedPos = { x: p.x + dx/d*0.3, y: p.y + dy/d*0.3 }
         
         // Calculate current enemy radius
-        let currentEnemyRadius = 12
-        if (e.type === 'melee') {
-          currentEnemyRadius = 12 + e.level * 0.8
-        } else if (e.type === 'ranged') {
-          currentEnemyRadius = 10 + e.level * 0.6
-        } else {
-          currentEnemyRadius = 14 + e.level * 1.0
-        }
+        const currentEnemyRadius = getEnemyRadius(e)
         
         // Check collision with other enemies first
         let canMove = true
@@ -1230,14 +1220,7 @@ const GameCanvas = React.memo(function GameCanvas() {
             const otherPos = nextEnemyPositions[otherE.id]
             if (otherPos) {
               // Calculate other enemy radius
-              let otherEnemyRadius = 12
-              if (otherE.type === 'melee') {
-                otherEnemyRadius = 12 + otherE.level * 0.8
-              } else if (otherE.type === 'ranged') {
-                otherEnemyRadius = 10 + otherE.level * 0.6
-              } else {
-                otherEnemyRadius = 14 + otherE.level * 1.0
-              }
+              const otherEnemyRadius = getEnemyRadius(otherE)
               
               if (checkCollision(calculatedPos, otherPos, currentEnemyRadius + 1, otherEnemyRadius + 1)) {
                 canMove = false
@@ -1334,14 +1317,7 @@ const GameCanvas = React.memo(function GameCanvas() {
         state.enemies.forEach(e => {
           const enemyPos = newEnemyPositions[e.id]
           if (enemyPos && !hit) {
-            let enemyRadius = 12
-            if (e.type === 'melee') {
-              enemyRadius = 12 + e.level * 0.8
-            } else if (e.type === 'ranged') {
-              enemyRadius = 10 + e.level * 0.6
-            } else {
-              enemyRadius = 14 + e.level * 1.0
-            }
+            const enemyRadius = getEnemyRadius(e)
             
             if (checkCollision({x: p.x, y: p.y}, enemyPos, p.radius, enemyRadius)) {
               // Apply damage if projectile has damage information
@@ -1571,37 +1547,159 @@ const GameCanvas = React.memo(function GameCanvas() {
 
       // Determine size and color based on enemy type and level
       let radius = 12;
-      if (e.type === 'melee') {
-        ctx.fillStyle = '#dc2626';
-        radius = 12 + e.level * 0.8;
-      } else if (e.type === 'ranged') {
-        ctx.fillStyle = '#f97316';
-        radius = 10 + e.level * 0.6;
+      
+      // Use proper color mapping for all enemy types
+      const enemyColor = getEnemyTypeColor(e.type);
+      
+      // Convert Tailwind color classes to hex colors for canvas
+      const colorMap: { [key: string]: string } = {
+        'text-red-400': '#f87171',
+        'text-green-400': '#4ade80',
+        'text-blue-400': '#60a5fa',
+        'text-gray-400': '#9ca3af',
+        'text-purple-400': '#c084fc',
+        'text-yellow-400': '#facc15',
+        'text-orange-400': '#fb923c',
+        'text-gray-300': '#d1d5db',
+        'text-cyan-400': '#22d3ee',
+        'text-red-600': '#dc2626',
+        'text-amber-400': '#fbbf24',
+        'text-pink-400': '#f472b6',
+        'text-yellow-300': '#fde047',
+        'text-indigo-400': '#818cf8',
+        'text-violet-400': '#a78bfa',
+        'text-green-600': '#16a34a',
+        'text-black': '#000000',
+        'text-emerald-400': '#34d399',
+        'text-white': '#ffffff'
+      };
+      
+      ctx.fillStyle = colorMap[enemyColor] || '#a78bfa';
+      
+      // Calculate enemy radius using helper function
+      radius = getEnemyRadius(e);
+
+      // Draw enemy with different shapes based on type
+      ctx.beginPath();
+      
+      if (e.type === 'tank' || e.type === 'construct' || e.type === 'crystal_guardian') {
+        // Square/rectangle for tank-like enemies
+        const size = radius * camera.zoom;
+        ctx.fillRect(screenPos.x - size, screenPos.y - size, size * 2, size * 2);
+      } else if (e.type === 'assassin' || e.type === 'phase_beast') {
+        // Diamond shape for agile enemies
+        const size = radius * camera.zoom;
+        ctx.moveTo(screenPos.x, screenPos.y - size);
+        ctx.lineTo(screenPos.x + size, screenPos.y);
+        ctx.lineTo(screenPos.x, screenPos.y + size);
+        ctx.lineTo(screenPos.x - size, screenPos.y);
+        ctx.closePath();
+        ctx.fill();
+      } else if (e.type === 'caster' || e.type === 'necromancer') {
+        // Triangle for caster enemies
+        const size = radius * camera.zoom;
+        ctx.moveTo(screenPos.x, screenPos.y - size);
+        ctx.lineTo(screenPos.x + size * 0.866, screenPos.y + size * 0.5);
+        ctx.lineTo(screenPos.x - size * 0.866, screenPos.y + size * 0.5);
+        ctx.closePath();
+        ctx.fill();
+      } else if (e.type === 'swarm') {
+        // Multiple small circles for swarm
+        const smallRadius = radius * 0.6 * camera.zoom;
+        for (let i = 0; i < 3; i++) {
+          const angle = (i * Math.PI * 2) / 3;
+          const offsetX = Math.cos(angle) * smallRadius * 0.8;
+          const offsetY = Math.sin(angle) * smallRadius * 0.8;
+          ctx.beginPath();
+          ctx.arc(screenPos.x + offsetX, screenPos.y + offsetY, smallRadius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (e.type === 'mimic') {
+        // Chest-like shape
+        const size = radius * camera.zoom;
+        // Main body
+        ctx.fillRect(screenPos.x - size, screenPos.y - size * 0.7, size * 2, size * 1.4);
+        // Lid
+        ctx.fillRect(screenPos.x - size * 1.1, screenPos.y - size * 0.9, size * 2.2, size * 0.4);
+      } else if (e.type === 'void_spawn') {
+        // Irregular void shape
+        const size = radius * camera.zoom;
+        const points = 8;
+        ctx.moveTo(screenPos.x + size, screenPos.y);
+        for (let i = 1; i <= points; i++) {
+          const angle = (i * Math.PI * 2) / points;
+          const variation = 0.7 + Math.sin(Date.now() * 0.01 + i) * 0.3; // Animated variation
+          const r = size * variation;
+          ctx.lineTo(screenPos.x + Math.cos(angle) * r, screenPos.y + Math.sin(angle) * r);
+        }
+        ctx.closePath();
+        ctx.fill();
       } else {
-        ctx.fillStyle = '#a78bfa';
-        radius = 14 + e.level * 1.0;
+        // Default circle for other types
+        ctx.arc(screenPos.x, screenPos.y, radius * camera.zoom, 0, Math.PI * 2);
+        ctx.fill();
       }
 
-      // Draw enemy circle
-      ctx.beginPath();
-      ctx.arc(screenPos.x, screenPos.y, radius * camera.zoom, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Draw enemy type indicators
+      // Draw enemy type indicators with special symbols for new types
       ctx.fillStyle = '#ffffff';
+      
       if (e.type === 'melee') {
+        // Sword symbol
         ctx.beginPath();
         ctx.moveTo(screenPos.x - 8 * camera.zoom, screenPos.y - 18 * camera.zoom);
         ctx.lineTo(screenPos.x - 2 * camera.zoom, screenPos.y - 26 * camera.zoom);
         ctx.lineTo(screenPos.x + 4 * camera.zoom, screenPos.y - 18 * camera.zoom);
         ctx.fill();
       } else if (e.type === 'ranged') {
+        // Bow symbol
         ctx.beginPath();
         ctx.arc(screenPos.x, screenPos.y - 6 * camera.zoom, 6 * camera.zoom, Math.PI * 0.2, Math.PI * 0.8);
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#ffffff';
         ctx.stroke();
+      } else if (e.type === 'swarm') {
+        // Multiple small dots for swarm
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath();
+          ctx.arc(screenPos.x + (i - 1) * 4 * camera.zoom, screenPos.y - 6 * camera.zoom, 2 * camera.zoom, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (e.type === 'mimic') {
+        // Chest-like rectangle
+        ctx.fillRect(screenPos.x - 6 * camera.zoom, screenPos.y - 10 * camera.zoom, 12 * camera.zoom, 8 * camera.zoom);
+      } else if (e.type === 'phase_beast') {
+        // Translucent circle for phase ability
+        ctx.globalAlpha = alpha * 0.6;
+        ctx.beginPath();
+        ctx.arc(screenPos.x, screenPos.y, (radius + 8) * camera.zoom, 0, Math.PI * 2);
+        ctx.strokeStyle = '#a78bfa';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.globalAlpha = alpha;
+      } else if (e.type === 'necromancer') {
+        // Skull symbol
+        ctx.beginPath();
+        ctx.arc(screenPos.x, screenPos.y - 8 * camera.zoom, 5 * camera.zoom, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(screenPos.x - 2 * camera.zoom, screenPos.y - 4 * camera.zoom, 4 * camera.zoom, 3 * camera.zoom);
+      } else if (e.type === 'void_spawn') {
+        // Dark void circle
+        ctx.fillStyle = '#000000';
+        ctx.beginPath();
+        ctx.arc(screenPos.x, screenPos.y, (radius - 4) * camera.zoom, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+      } else if (e.type === 'crystal_guardian') {
+        // Diamond/crystal shape
+        ctx.beginPath();
+        ctx.moveTo(screenPos.x, screenPos.y - 10 * camera.zoom);
+        ctx.lineTo(screenPos.x + 6 * camera.zoom, screenPos.y - 4 * camera.zoom);
+        ctx.lineTo(screenPos.x, screenPos.y + 2 * camera.zoom);
+        ctx.lineTo(screenPos.x - 6 * camera.zoom, screenPos.y - 4 * camera.zoom);
+        ctx.closePath();
+        ctx.fill();
       } else {
+        // Default indicator for other types
         ctx.beginPath();
         ctx.arc(screenPos.x, screenPos.y, (radius + 6) * camera.zoom, 0, Math.PI * 2);
         ctx.strokeStyle = 'rgba(255,255,255,0.06)';
@@ -1612,15 +1710,19 @@ const GameCanvas = React.memo(function GameCanvas() {
       // Draw HP bar
       drawHpBar(ctx, screenPos.x, screenPos.y - (radius + 15) * camera.zoom, 40 * camera.zoom, 6 * camera.zoom, e.hp, e.maxHp, alpha);
 
-      // Draw level label
+      // Draw level and name labels
       drawLabel(ctx, `Lv.${e.level}`, screenPos.x, screenPos.y - (radius + 25) * camera.zoom, alpha);
+      
+      // Draw monster name (shortened for display)
+      const displayName = e.name.replace(/L\d+$/, '').trim(); // Remove level suffix from name
+      drawLabel(ctx, displayName, screenPos.x, screenPos.y - (radius + 35) * camera.zoom, alpha, 10);
 
       ctx.restore();
     });
 
     // draw player
     const playerScreenPos = worldToScreen(playerPos.x, playerPos.y);
-    const playerSize = 32 * camera.zoom;
+    const playerSize = 40 * camera.zoom; // Increased from 32 to 40 for better visibility
     
     // Add idle animation effect when no enemies
     let animationOffset = 0;
@@ -1697,7 +1799,7 @@ const GameCanvas = React.memo(function GameCanvas() {
       ctx.save();
       
       // Arc properties
-      const playerRadius = 16; // Player model radius
+      const playerRadius = 20; // Player model radius (matches half of 40px size)
       const arcDistance = 20; // 20px separation from player model edge
       const arcRadius = (playerRadius + arcDistance) * camera.zoom;
       const arcSpread = Math.PI / 3; // 60 degrees spread (π/3 radians)
@@ -1811,7 +1913,7 @@ const GameCanvas = React.memo(function GameCanvas() {
       ctx.save()
       
       // 1. Draw Player Collision Radius (always visible when debug is on)
-      const playerRadius = 16 // Player collision radius
+      const playerRadius = 20 // Player collision radius (matches half of 40px size)
       const scaledPlayerRadius = playerRadius * camera.zoom
       
       ctx.globalAlpha = 0.4
@@ -2897,9 +2999,9 @@ const GameCanvas = React.memo(function GameCanvas() {
     ctx.strokeRect(x-w/2, y-h/2, w, h);
   }
 
-  function drawLabel(ctx: CanvasRenderingContext2D, t: string, x: number, y: number, a: number) {
+  function drawLabel(ctx: CanvasRenderingContext2D, t: string, x: number, y: number, a: number, fontSize: number = 12) {
     ctx.fillStyle = `rgba(255,255,255,${a})`;
-    ctx.font = '12px sans-serif';
+    ctx.font = `${fontSize}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.fillText(t, x, y);
   }
