@@ -21,7 +21,7 @@ export default function Header({ onOpenModal }: HeaderProps) {
           {/* Title Section */}
           <div className="flex items-center space-x-3">
             <h1 className="header-title text-2xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">
-              Auto Battle Arena
+              Auto battle is awesome
             </h1>
             <BuildInfoBadge />
           </div>
